@@ -1,0 +1,27 @@
+/*
+ * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#include "NodeData.h"
+
+namespace ACPI {
+
+AK::ErrorOr<i64> NodeData::as_integer()
+{
+    switch (m_type) {
+    case NodeData::Type::BYTE:
+        return static_cast<i64>(m_data.get<i8>());
+    case NodeData::Type::WORD:
+        return static_cast<i64>(m_data.get<i16>());
+    case NodeData::Type::DWORD:
+        return static_cast<i64>(m_data.get<i32>());
+    case NodeData::Type::QWORD:
+        return static_cast<i64>(m_data.get<i64>());
+    default:
+        return Error::from_string_literal("Unimplemented cast!");
+    }
+}
+
+}
