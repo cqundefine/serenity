@@ -1,6 +1,7 @@
 set(CMD_SOURCES_CPP
     abench.cpp
     aconv.cpp
+    acpi.cpp
     adjtime.cpp
     allocate.cpp
     animation.cpp

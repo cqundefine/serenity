@@ -507,6 +507,7 @@ if (BUILD_LAGOM)
         Wasm
         WebSocket
         XML
+        ACPI
     )
 
     target_link_libraries(LibCore PRIVATE LibURL Threads::Threads)
@@ -571,6 +572,7 @@ if (BUILD_LAGOM)
 
         # Lagom Utilities
         lagom_utility(abench SOURCES ../../Userland/Utilities/abench.cpp LIBS LibMain LibFileSystem LibAudio)
+        lagom_utility(acpi SOURCES ../../Userland/Utilities/acpi.cpp LIBS LibACPI LibMain LibFileSystem)
         lagom_utility(aconv SOURCES ../../Userland/Utilities/aconv.cpp LIBS LibMain LibFileSystem LibAudio)
 
         if (NOT EMSCRIPTEN)
