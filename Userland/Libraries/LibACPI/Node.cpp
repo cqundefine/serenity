@@ -8,7 +8,7 @@
 
 namespace ACPI {
 
-AK::ErrorOr<AK::RefPtr<Node>> Node::find_node(NameString const& path, AK::RefPtr<Node> const& scope)
+ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const& scope)
 {
     auto target = scope;
     if (path.type() == NameString::Type::Relative && path.depth() > 0) {
@@ -38,7 +38,7 @@ AK::ErrorOr<AK::RefPtr<Node>> Node::find_node(NameString const& path, AK::RefPtr
     return target;
 }
 
-ErrorOr<AK::RefPtr<Node>> Node::find_child(NameSegment name) const
+ErrorOr<RefPtr<Node>> Node::find_child(NameSegment name) const
 {
     auto child = m_child;
     while (child && (child->name() != name)) {
@@ -51,7 +51,7 @@ ErrorOr<AK::RefPtr<Node>> Node::find_child(NameSegment name) const
     return child;
 }
 
-// ErrorOr<AK::RefPtr<Node>> Node::find_neighbour(NameSegment name) const
+// ErrorOr<RefPtr<Node>> Node::find_neighbour(NameSegment name) const
 //{
 //     auto child = m_neighbour;
 //     while (child && (child->name() != name))
@@ -64,7 +64,7 @@ ErrorOr<AK::RefPtr<Node>> Node::find_child(NameSegment name) const
 //     return child;
 // }
 
-ErrorOr<AK::RefPtr<Node>> Node::find_child(AK::StringView name) const
+ErrorOr<RefPtr<Node>> Node::find_child(StringView name) const
 {
     if (name.length() != 4)
         return Error::from_string_literal("Name must have a lenth of 4.");
@@ -73,7 +73,7 @@ ErrorOr<AK::RefPtr<Node>> Node::find_child(AK::StringView name) const
     return find_child(broken_name);
 }
 
-// ErrorOr<AK::RefPtr<Node>> Node::find_neighbour(AK::StringView name) const
+// ErrorOr<RefPtr<Node>> Node::find_neighbour(StringView name) const
 //{
 //     if (name.length() != 4)
 //         return Error::from_string_literal("Name must have a lenth of 4.");
@@ -82,7 +82,7 @@ ErrorOr<AK::RefPtr<Node>> Node::find_child(AK::StringView name) const
 //     return find_neighbour(broken_name);
 // }
 
-ErrorOr<void> Node::insert_child(NameSegment name, AK::RefPtr<Node> const& node)
+ErrorOr<void> Node::insert_child(NameSegment name, RefPtr<Node> const& node)
 {
     /// FIXME: Duplicate name detection.
     node->m_name = name;
@@ -92,7 +92,7 @@ ErrorOr<void> Node::insert_child(NameSegment name, AK::RefPtr<Node> const& node)
     return {};
 }
 
-ErrorOr<void> Node::insert_child(AK::StringView name, AK::RefPtr<Node> const& node)
+ErrorOr<void> Node::insert_child(StringView name, RefPtr<Node> const& node)
 {
     if (name.length() != 4)
         return Error::from_string_literal("Name must have a lenth of 4.");
@@ -101,10 +101,10 @@ ErrorOr<void> Node::insert_child(AK::StringView name, AK::RefPtr<Node> const& no
     return insert_child(broken_name, node);
 }
 
-// static ErrorOr<AK::RefPtr<Node>> get_node_at_dirname(AK::RefPtr<Node> const& root, NameString path)
+// static ErrorOr<RefPtr<Node>> get_node_at_dirname(RefPtr<Node> const& root, NameString path)
 //{
 //     // Move upwards towards root.
-//     AK::RefPtr<Node> target = root;
+//     RefPtr<Node> target = root;
 //     if (path.type() == NameString::Type::Relative && path.depth() > 0)
 //     {
 //         for (size_t i = 0; i < path.depth(); i++)
@@ -139,7 +139,7 @@ ErrorOr<void> Node::insert_child(AK::StringView name, AK::RefPtr<Node> const& no
 //     return target;
 // }
 
-// ErrorOr<void> Node::insert_child_recursive(NameString path, AK::RefPtr<Node> const& node)
+// ErrorOr<void> Node::insert_child_recursive(NameString path, RefPtr<Node> const& node)
 //{
 //     if (path.count() == 0)
 //     {
@@ -157,7 +157,7 @@ ErrorOr<void> Node::insert_child(AK::StringView name, AK::RefPtr<Node> const& no
 // }
 
 // FIXME: Split off into separate <x>Node files.
-static AK::StringView node_data_type_to_string_view(NodeData::Type type)
+static StringView node_data_type_to_string_view(NodeData::Type type)
 {
     switch (type) {
     case NodeData::Type::None:
@@ -178,7 +178,7 @@ static AK::StringView node_data_type_to_string_view(NodeData::Type type)
     }
 }
 
-void NameNode::write_description(AK::StringBuilder& builder)
+void NameNode::write_description(StringBuilder& builder)
 {
     builder.append(node_data_type_to_string_view(m_data.type()));
     switch (m_data.type()) {
@@ -195,7 +195,7 @@ void NameNode::write_description(AK::StringBuilder& builder)
     }
 }
 
-void MethodNode::write_description(AK::StringBuilder& builder)
+void MethodNode::write_description(StringBuilder& builder)
 {
     builder.appendff("Method(Args: {}, Start: {}, End: {}, Flags: {})", arguments(), start(), end(), flags());
 }

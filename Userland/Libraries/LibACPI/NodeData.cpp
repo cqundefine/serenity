@@ -8,7 +8,7 @@
 
 namespace ACPI {
 
-AK::ErrorOr<i64> NodeData::as_integer()
+ErrorOr<i64> NodeData::as_integer()
 {
     switch (m_type) {
     case NodeData::Type::Byte:

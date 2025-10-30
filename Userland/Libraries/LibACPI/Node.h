@@ -13,28 +13,28 @@
 
 namespace ACPI {
 
-class Node : public AK::RefCounted<Node> {
+class Node : public RefCounted<Node> {
 public:
-    static AK::ErrorOr<AK::RefPtr<Node>> find_node(NameString const& path, AK::RefPtr<Node> const& scope);
+    static ErrorOr<RefPtr<Node>> find_node(NameString const& path, RefPtr<Node> const& scope);
 
-    ErrorOr<AK::RefPtr<Node>> find_child(NameSegment name) const;
-    ErrorOr<AK::RefPtr<Node>> find_child(AK::StringView name) const;
+    ErrorOr<RefPtr<Node>> find_child(NameSegment name) const;
+    ErrorOr<RefPtr<Node>> find_child(StringView name) const;
 
-    // ErrorOr<AK::RefPtr<Node>> find_neighbour(NameSegment name) const;
-    // ErrorOr<AK::RefPtr<Node>> find_neighbour(AK::StringView name) const;
+    // ErrorOr<RefPtr<Node>> find_neighbour(NameSegment name) const;
+    // ErrorOr<RefPtr<Node>> find_neighbour(StringView name) const;
 
-    ErrorOr<void> insert_child(NameSegment name, AK::RefPtr<Node> const& node);
-    ErrorOr<void> insert_child(AK::StringView name, AK::RefPtr<Node> const& node);
-    // ErrorOr<void> insert_child_recursive(NameString path, AK::RefPtr<Node> const& node);
+    ErrorOr<void> insert_child(NameSegment name, RefPtr<Node> const& node);
+    ErrorOr<void> insert_child(StringView name, RefPtr<Node> const& node);
+    // ErrorOr<void> insert_child_recursive(NameString path, RefPtr<Node> const& node);
 
     NameSegment name() const { return m_name; }
 
-    AK::RefPtr<Node> parent() const { return m_parent; }
-    AK::RefPtr<Node> child() const { return m_child; }
-    AK::RefPtr<Node> neighbour() const { return m_neighbour; }
+    RefPtr<Node> parent() const { return m_parent; }
+    RefPtr<Node> child() const { return m_child; }
+    RefPtr<Node> neighbour() const { return m_neighbour; }
 
-    virtual void write_description(AK::StringBuilder& builder) { builder.append(type()); }
-    virtual AK::StringView type() const { return "Node"sv; }
+    virtual void write_description(StringBuilder& builder) { builder.append(type()); }
+    virtual StringView type() const { return "Node"sv; }
     virtual ~Node() { }
 
 protected:
@@ -52,9 +52,9 @@ protected:
     }
 
     NameSegment m_name;
-    AK::RefPtr<Node> m_parent { nullptr };
-    AK::RefPtr<Node> m_child { nullptr };
-    AK::RefPtr<Node> m_neighbour { nullptr };
+    RefPtr<Node> m_parent { nullptr };
+    RefPtr<Node> m_child { nullptr };
+    RefPtr<Node> m_neighbour { nullptr };
 };
 
 class DeviceNode : public Node {
@@ -65,7 +65,7 @@ public:
     }
     ~DeviceNode() = default;
 
-    AK::StringView type() const override { return "Device"sv; }
+    StringView type() const override { return "Device"sv; }
 };
 
 class ScopeNode : public Node {
@@ -76,7 +76,7 @@ public:
     }
     ~ScopeNode() = default;
 
-    AK::StringView type() const override { return "Scope"sv; }
+    StringView type() const override { return "Scope"sv; }
 };
 
 class NameNode : public Node {
@@ -88,8 +88,8 @@ public:
     }
     ~NameNode() = default;
 
-    void write_description(AK::StringBuilder& builder) override;
-    AK::StringView type() const override { return "Name"sv; }
+    void write_description(StringBuilder& builder) override;
+    StringView type() const override { return "Name"sv; }
 
 protected:
     NodeData m_data;
@@ -104,7 +104,7 @@ public:
     {
     }
     ~OperationRegionNode() = default;
-    AK::StringView type() const override { return "Op. Region"sv; }
+    StringView type() const override { return "Op. Region"sv; }
 
 protected:
     u8 m_space;
@@ -114,16 +114,16 @@ protected:
 
 class Field {
 public:
-    Field(AK::RefPtr<Node> const& operation_region, u8 flags)
+    Field(RefPtr<Node> const& operation_region, u8 flags)
         : m_operation_region(operation_region)
         , m_flags(flags)
     {
     }
-    AK::RefPtr<Node> const& operation_region() const { return m_operation_region; }
+    RefPtr<Node> const& operation_region() const { return m_operation_region; }
     u8 flags() const { return m_flags; }
 
 protected:
-    AK::RefPtr<Node> m_operation_region;
+    RefPtr<Node> m_operation_region;
     u8 m_flags;
 };
 
@@ -134,7 +134,7 @@ public:
     {
     }
     ~FieldNode() = default;
-    AK::StringView type() const override { return "Field"sv; }
+    StringView type() const override { return "Field"sv; }
 
     Field field() const { return m_field; }
 
@@ -152,8 +152,8 @@ public:
     }
     ~MethodNode() = default;
 
-    void write_description(AK::StringBuilder& builder) override;
-    AK::StringView type() const override { return "Method"sv; }
+    void write_description(StringBuilder& builder) override;
+    StringView type() const override { return "Method"sv; }
 
     size_t start() const { return m_start; }
     size_t end() const { return m_end; }
@@ -174,7 +174,7 @@ public:
         , m_block_length(block_length)
     {
     }
-    AK::StringView type() const override { return "Processor (Depr.)"sv; }
+    StringView type() const override { return "Processor (Depr.)"sv; }
 
 protected:
     u32 m_address { 0 };

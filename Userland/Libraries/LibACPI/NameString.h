@@ -18,34 +18,34 @@ public:
         : m_data({ '_', '_', '_', '_' })
     {
     }
-    static ErrorOr<NameSegment> from_string_view(AK::StringView view);
+    static ErrorOr<NameSegment> from_string_view(StringView view);
 
     friend bool operator==(NameSegment const& l, NameSegment const& r) { return l.m_data == r.m_data; }
     friend bool operator!=(NameSegment const& l, NameSegment const& r) { return l.m_data != r.m_data; }
 
-    AK::StringView to_string_view();
+    StringView to_string_view();
 
 protected:
     friend class NameString;
-    NameSegment(AK::Array<char, 4> value);
-    AK::Array<char, 4> m_data;
+    NameSegment(Array<char, 4> value);
+    Array<char, 4> m_data;
 };
 
 class NameString {
 public:
-    enum class Type {
+    enum class Type : u8 {
         Absolute,
         Relative
     };
 
-    static AK::ErrorOr<NameString> from_reader(TableReader& reader);
-    static AK::ErrorOr<NameString> from_string(AK::StringView const& str);
+    static ErrorOr<NameString> from_reader(TableReader& reader);
+    static ErrorOr<NameString> from_string(StringView const& str);
 
-    AK::ErrorOr<NameString> dirname() const;
-    AK::ErrorOr<NameSegment> basename() const;
+    ErrorOr<NameString> dirname() const;
+    ErrorOr<NameSegment> basename() const;
 
-    AK::ErrorOr<AK::String> to_string() const;
-    AK::ErrorOr<NameSegment> segment(size_t index) const;
+    ErrorOr<String> to_string() const;
+    ErrorOr<NameSegment> segment(size_t index) const;
     Type type() const { return m_type; }
     size_t depth() const { return m_depth; }
     size_t count() const { return m_count; }
@@ -59,7 +59,7 @@ protected:
         , m_name_sequence(""sv)
     {
     }
-    NameString(Type type, size_t depth, int additional_unit_bytes, size_t count, AK::StringView sequence)
+    NameString(Type type, size_t depth, int additional_unit_bytes, size_t count, StringView sequence)
         : m_type(type)
         , m_depth(depth)
         , m_count(count)
@@ -73,7 +73,7 @@ protected:
     size_t m_count { 0 };
 
     int m_additional_unit_bytes { 0 };
-    AK::StringView m_name_sequence;
+    StringView m_name_sequence;
 };
 
 }

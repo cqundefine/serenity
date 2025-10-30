@@ -21,7 +21,7 @@ namespace ACPI {
         return Error::from_string_literal("Unimplemented");         \
     } while (0)
 
-AK::ErrorOr<void> Interpreter::insert_node(NameString const& path, AK::RefPtr<Node> const& scope, AK::RefPtr<Node> const& node)
+ErrorOr<void> Interpreter::insert_node(NameString const& path, RefPtr<Node> const& scope, RefPtr<Node> const& node)
 {
     auto target = m_table->namespace_root();
 
@@ -49,7 +49,7 @@ AK::ErrorOr<void> Interpreter::insert_node(NameString const& path, AK::RefPtr<No
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_def_method(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_method(TableReader& reader, ParseFrame const& frame)
 {
     // DefMethod := MethodOp PkgLength NameString MethodFlags TermList
     auto start = reader.position() - 1;
@@ -59,7 +59,7 @@ AK::ErrorOr<void> Interpreter::process_def_method(TableReader& reader, ParseFram
     auto flags = reader.byte();
 
     auto term_list_start = reader.position();
-    auto node = AK::make_ref_counted<MethodNode>(term_list_start, start + package_length, flags);
+    auto node = make_ref_counted<MethodNode>(term_list_start, start + package_length, flags);
 
     TRY(insert_node(path, frame.node(), node));
     reader.set_position(start + package_length + 1);
@@ -67,7 +67,7 @@ AK::ErrorOr<void> Interpreter::process_def_method(TableReader& reader, ParseFram
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_def_scope(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_scope(TableReader& reader, ParseFrame const& frame)
 {
     // DefScope := ScopeOp PkgLength NameString TermList
     auto start = reader.position() - 1;
@@ -81,14 +81,14 @@ AK::ErrorOr<void> Interpreter::process_def_scope(TableReader& reader, ParseFrame
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_def_device(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_device(TableReader& reader, ParseFrame const& frame)
 {
     // DefDevice := DeviceOp PkgLength NameString TermList
     auto start = reader.position() - 1;
     auto package_length = reader.package_length();
     auto path = TRY(NameString::from_reader(reader));
 
-    auto node = AK::make_ref_counted<DeviceNode>();
+    auto node = make_ref_counted<DeviceNode>();
     TRY(insert_node(path, frame.node(), node));
 
     auto new_frame = ParseFrame(node, start + package_length);
@@ -97,7 +97,7 @@ AK::ErrorOr<void> Interpreter::process_def_device(TableReader& reader, ParseFram
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_def_processor(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_processor(TableReader& reader, ParseFrame const& frame)
 {
     // DefProcessor := ProcessorOp PkgLength NameString ProcID PblkAddr PblkLen TermList
     auto start = reader.position() - 1;
@@ -107,7 +107,7 @@ AK::ErrorOr<void> Interpreter::process_def_processor(TableReader& reader, ParseF
     auto block_address = reader.dword();
     auto block_length = reader.byte();
 
-    auto node = AK::make_ref_counted<ProcessorNode>(block_address, id, block_length);
+    auto node = make_ref_counted<ProcessorNode>(block_address, id, block_length);
     TRY(insert_node(path, frame.node(), node));
 
     // FIXME: Figure out what can actually be inside a Processor node.
@@ -117,7 +117,7 @@ AK::ErrorOr<void> Interpreter::process_def_processor(TableReader& reader, ParseF
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_field_element(TableReader& reader, ParseFrame const& frame, Field const& field)
+ErrorOr<void> Interpreter::process_field_element(TableReader& reader, ParseFrame const& frame, Field const& field)
 {
     (void)frame;
     (void)field;
@@ -138,7 +138,7 @@ AK::ErrorOr<void> Interpreter::process_field_element(TableReader& reader, ParseF
         auto package_length = reader.package_length();
 
         (void)package_length;
-        auto node = AK::make_ref_counted<FieldNode>(field);
+        auto node = make_ref_counted<FieldNode>(field);
         TRY(frame.node()->insert_child(segment, node));
 
         return {};
@@ -161,7 +161,7 @@ AK::ErrorOr<void> Interpreter::process_field_element(TableReader& reader, ParseF
     UNIMPLEMENTED_OPCODE("process_field_element", opcode);
 }
 
-AK::ErrorOr<void> Interpreter::process_def_field(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_field(TableReader& reader, ParseFrame const& frame)
 {
     // DefField := FieldOp PkgLength NameString FieldFlags FieldList
     auto start = reader.position() - 1;
@@ -183,19 +183,19 @@ AK::ErrorOr<void> Interpreter::process_def_field(TableReader& reader, ParseFrame
     return {};
 }
 
-AK::ErrorOr<void> Interpreter::process_def_name(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_name(TableReader& reader, ParseFrame const& frame)
 {
     // DefName := NameOp NameString DataRefObject
     auto path = TRY(NameString::from_reader(reader));
 
     auto data = TRY(read_data_ref_object(reader, frame));
-    auto node = AK::make_ref_counted<NameNode>(data);
+    auto node = make_ref_counted<NameNode>(data);
 
     TRY(insert_node(path, frame.node(), node));
     return {};
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_def_buffer(TableReader& reader, ParseFrame const& frame)
+ErrorOr<NodeData> Interpreter::read_def_buffer(TableReader& reader, ParseFrame const& frame)
 {
     // DefBuffer := BufferOp PkgLength BufferSize ByteList
     auto package_length = reader.package_length();
@@ -208,13 +208,13 @@ AK::ErrorOr<NodeData> Interpreter::read_def_buffer(TableReader& reader, ParseFra
     }
 
     // FIXME: Figure out if ignoring package size and just using the buffer size is expected behaviour.
-    AK::Vector<u8> data;
+    Vector<u8> data;
     data.resize(buffer_size);
     reader.read_into(buffer_size, data);
     return NodeData(Buffer(data));
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_package(TableReader& reader, ParseFrame const& frame, u16 opcode)
+ErrorOr<NodeData> Interpreter::read_package(TableReader& reader, ParseFrame const& frame, u16 opcode)
 {
     auto package_length = reader.package_length();
     size_t num_elements = 0;
@@ -233,7 +233,7 @@ AK::ErrorOr<NodeData> Interpreter::read_package(TableReader& reader, ParseFrame 
 
     (void)package_length;
 
-    AK::Vector<NodeData> package;
+    Vector<NodeData> package;
     // PackageElementList := Nothing | <packageelement | packageelementlist>
     for (size_t i = 0; i < num_elements; i++) {
         // PackageElement := DataRefObject | NameString
@@ -251,7 +251,7 @@ AK::ErrorOr<NodeData> Interpreter::read_package(TableReader& reader, ParseFrame 
     return NodeData(package);
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_data_object(TableReader& reader, ParseFrame const& frame, u16 opcode)
+ErrorOr<NodeData> Interpreter::read_data_object(TableReader& reader, ParseFrame const& frame, u16 opcode)
 {
     (void)frame;
 
@@ -267,7 +267,7 @@ AK::ErrorOr<NodeData> Interpreter::read_data_object(TableReader& reader, ParseFr
     return Error::from_string_literal("Unimplemented");
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_data_ref_object(TableReader& reader, ParseFrame const& frame)
+ErrorOr<NodeData> Interpreter::read_data_ref_object(TableReader& reader, ParseFrame const& frame)
 {
     // DataRefObject := DataObject | ObjectReference
     u16 opcode = reader.opcode();
@@ -279,7 +279,7 @@ AK::ErrorOr<NodeData> Interpreter::read_data_ref_object(TableReader& reader, Par
     UNIMPLEMENTED_OPCODE("read_data_ref_object", opcode);
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_term_arg(TableReader& reader, ParseFrame const& frame)
+ErrorOr<NodeData> Interpreter::read_term_arg(TableReader& reader, ParseFrame const& frame)
 {
     // TermArg := ExpressionOpcode | DataObject | ArgObj | LocalObj
     u16 opcode = reader.byte();
@@ -291,7 +291,7 @@ AK::ErrorOr<NodeData> Interpreter::read_term_arg(TableReader& reader, ParseFrame
     UNIMPLEMENTED_OPCODE("read_term_arg", opcode);
 }
 
-AK::ErrorOr<NodeData> Interpreter::read_computational_data(TableReader& reader, ParseFrame const& frame, u16 opcode)
+ErrorOr<NodeData> Interpreter::read_computational_data(TableReader& reader, ParseFrame const& frame, u16 opcode)
 {
     // ComputationalData := ByteConst | WordConst | DWordConst | QWordConst |
     //                      String | ConstObj | RevisionOp | DefBuffer
@@ -325,7 +325,7 @@ AK::ErrorOr<NodeData> Interpreter::read_computational_data(TableReader& reader, 
     UNIMPLEMENTED_OPCODE("read_computational_data", opcode);
 }
 
-AK::ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader, ParseFrame const& frame)
 {
     // DefOpRegion := OpRegionOp NameString RegionSpace RegionOffset RegionLen
     auto path = TRY(NameString::from_reader(reader));
@@ -334,7 +334,7 @@ AK::ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader,
     auto region_offset = TRY(TRY(read_term_arg(reader, frame)).as_integer());
     auto region_length = TRY(TRY(read_term_arg(reader, frame)).as_integer());
 
-    auto node = AK::make_ref_counted<OperationRegionNode>(region_space, region_offset, region_length);
+    auto node = make_ref_counted<OperationRegionNode>(region_space, region_offset, region_length);
     TRY(insert_node(path, frame.node(), node));
     return {};
 }
@@ -354,9 +354,9 @@ ParseFrame Interpreter::pop_parse_frame()
     return frame;
 }
 
-AK::ErrorOr<AK::RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
+ErrorOr<RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
 {
-    TableReader reader(AK::StringView((char*)buffer, length));
+    TableReader reader(StringView((char*)buffer, length));
 
     // AMLCode := DefBlockHeader TermList
 
@@ -393,7 +393,7 @@ AK::ErrorOr<AK::RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
         return Error::from_string_literal("Checksum failure.");
     }
 
-    auto table = AK::make_ref_counted<ACPI::Table>();
+    auto table = make_ref_counted<ACPI::Table>();
     table->set_block_header(ACPI::BlockHeader(table_signature, table_length, spec_compliance, checksum, oem_id, oem_table_id, oem_revision, creator_id, creator_revision));
 
     m_table = table;
@@ -421,7 +421,7 @@ AK::ErrorOr<AK::RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
     return m_table;
 }
 
-AK::ErrorOr<void> Interpreter::read_term(TableReader& reader, ParseFrame const& frame)
+ErrorOr<void> Interpreter::read_term(TableReader& reader, ParseFrame const& frame)
 {
     if (TableReader::is_lead_name_char(reader.peek())) {
         auto ns = TRY(NameString::from_reader(reader));

@@ -29,7 +29,7 @@ u8 TableReader::peek()
     return m_view[m_position];
 }
 
-void TableReader::read_into(size_t len, AK::Vector<u8>& buffer)
+void TableReader::read_into(size_t len, Vector<u8>& buffer)
 {
     for (size_t i = 0; i < len; i++) {
         buffer[i] = byte();
@@ -54,7 +54,7 @@ u32 TableReader::dword()
     return byte() | (byte() << 8) | (byte() << 16) | (byte() << 24);
 }
 
-AK::ErrorOr<AK::String> TableReader::string()
+ErrorOr<String> TableReader::string()
 {
     size_t start = m_position;
     u8 b = byte();
@@ -67,7 +67,7 @@ AK::ErrorOr<AK::String> TableReader::string()
     } while (b != 0);
 
     auto view = m_view.substring_view(start, m_position - start);
-    return AK::String::from_utf8_with_replacement_character(view, AK::String::WithBOMHandling::No);
+    return String::from_utf8_with_replacement_character(view, String::WithBOMHandling::No);
 }
 
 u64 TableReader::qword()
@@ -101,7 +101,7 @@ i64 TableReader::package_length()
     return value;
 }
 
-AK::ErrorOr<AK::StringView> TableReader::name_segment()
+ErrorOr<StringView> TableReader::name_segment()
 {
     auto segment = string_view(4);
     if (!TableReader::is_lead_name_char(segment[0]) || !TableReader::is_name_char(segment[1]) || !TableReader::is_name_char(segment[2]) || !TableReader::is_name_char(segment[3])) {
@@ -112,7 +112,7 @@ AK::ErrorOr<AK::StringView> TableReader::name_segment()
     return segment;
 }
 
-AK::StringView TableReader::string_view(size_t size)
+StringView TableReader::string_view(size_t size)
 {
     if (m_position + size >= length())
         size = length() - m_position;

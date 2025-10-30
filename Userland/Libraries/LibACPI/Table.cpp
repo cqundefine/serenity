@@ -10,15 +10,15 @@ namespace ACPI {
 
 Table::Table()
 {
-    m_namespace_root = AK::make_ref_counted<DeviceNode>();
-    m_namespace_root->insert_child("_SB_"sv, AK::make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_TZ_"sv, AK::make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_PR_"sv, AK::make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_SI_"sv, AK::make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_GPE"sv, AK::make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_DS_"sv, AK::make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_REV"sv, AK::make_ref_counted<NameNode>(NodeData(1))).release_value_but_fixme_should_propagate_errors();
-    m_namespace_root->insert_child("_OSI"sv, AK::make_ref_counted<NameNode>(NodeData(0))).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root = make_ref_counted<DeviceNode>();
+    m_namespace_root->insert_child("_SB_"sv, make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_TZ_"sv, make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_PR_"sv, make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_SI_"sv, make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_GPE"sv, make_ref_counted<ScopeNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_DS_"sv, make_ref_counted<DeviceNode>()).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_REV"sv, make_ref_counted<NameNode>(NodeData(1))).release_value_but_fixme_should_propagate_errors();
+    m_namespace_root->insert_child("_OSI"sv, make_ref_counted<NameNode>(NodeData(0))).release_value_but_fixme_should_propagate_errors();
 }
 
 void Table::print_namespace() const
@@ -27,12 +27,12 @@ void Table::print_namespace() const
     print_node(current, 0);
 }
 
-void Table::print_node(AK::RefPtr<Node> const& node, int depth) const
+void Table::print_node(RefPtr<Node> const& node, int depth) const
 {
     if (node.is_null())
         return;
 
-    AK::StringBuilder sb;
+    StringBuilder sb;
     sb.append_repeated(' ', depth + depth);
 
     auto name = node->name().to_string_view();

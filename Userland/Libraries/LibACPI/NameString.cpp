@@ -9,12 +9,12 @@
 
 namespace ACPI {
 
-NameSegment::NameSegment(AK::Array<char, 4> value)
+NameSegment::NameSegment(Array<char, 4> value)
     : m_data(value)
 {
 }
 
-ErrorOr<NameSegment> NameSegment::from_string_view(AK::StringView view)
+ErrorOr<NameSegment> NameSegment::from_string_view(StringView view)
 {
     if (!TableReader::is_lead_name_char(view[0]) || !TableReader::is_name_char(view[1]) || !TableReader::is_name_char(view[2]) || !TableReader::is_name_char(view[3])) {
         warnln("[LibACPI] Invalid character found inside name segment: '{}'", view);
@@ -24,13 +24,13 @@ ErrorOr<NameSegment> NameSegment::from_string_view(AK::StringView view)
     return NameSegment({ view[0], view[1], view[2], view[3] });
 }
 
-AK::StringView NameSegment::to_string_view()
+StringView NameSegment::to_string_view()
 {
-    AK::StringView view(m_data.data(), 4);
+    StringView view(m_data.data(), 4);
     return view;
 }
 
-AK::ErrorOr<NameString> NameString::from_reader(TableReader& reader)
+ErrorOr<NameString> NameString::from_reader(TableReader& reader)
 {
     Type type = Type::Relative;
     size_t depth = 0;
@@ -101,7 +101,7 @@ AK::ErrorOr<NameString> NameString::from_reader(TableReader& reader)
     return NameString(type, depth, 0, count, view);
 }
 
-AK::ErrorOr<NameString> NameString::from_string(AK::StringView const& str)
+ErrorOr<NameString> NameString::from_string(StringView const& str)
 {
     Type type = Type::Relative;
     size_t depth = 0;
@@ -152,7 +152,7 @@ AK::ErrorOr<NameString> NameString::from_string(AK::StringView const& str)
     return NameString(type, depth, 1, count, str.substring_view(segment_start, count * 5));
 }
 
-AK::ErrorOr<NameSegment> NameString::segment(std::size_t index) const
+ErrorOr<NameSegment> NameString::segment(std::size_t index) const
 {
     if (index >= m_count) {
         return Error::from_string_literal("Segment index out of bounds!");
@@ -161,9 +161,9 @@ AK::ErrorOr<NameSegment> NameString::segment(std::size_t index) const
     return NameSegment::from_string_view(m_name_sequence.substring_view(index * (4 + m_additional_unit_bytes), 4));
 }
 
-AK::ErrorOr<AK::String> NameString::to_string() const
+ErrorOr<String> NameString::to_string() const
 {
-    AK::StringBuilder builder;
+    StringBuilder builder;
     if (m_type == NameString::Type::Absolute) {
         builder.append('\\');
     } else if (m_depth > 0) {
@@ -180,7 +180,7 @@ AK::ErrorOr<AK::String> NameString::to_string() const
     return builder.to_string();
 }
 
-AK::ErrorOr<NameString> NameString::dirname() const
+ErrorOr<NameString> NameString::dirname() const
 {
     if (m_count == 0) {
         return Error::from_string_literal("NullNameString has no dir name!");
@@ -188,7 +188,7 @@ AK::ErrorOr<NameString> NameString::dirname() const
     return NameString(m_type, m_depth, m_additional_unit_bytes, m_count - 1, m_name_sequence);
 }
 
-AK::ErrorOr<NameSegment> NameString::basename() const
+ErrorOr<NameSegment> NameString::basename() const
 {
     if (m_count == 0) {
         return Error::from_string_literal("NullNameString has no base name!");

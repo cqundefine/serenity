@@ -13,13 +13,13 @@ namespace ACPI {
 
 class Buffer {
 public:
-    Buffer(AK::Vector<u8> data)
+    Buffer(Vector<u8> data)
         : m_raw(move(data))
     {
     }
 
 protected:
-    AK::Vector<u8> m_raw;
+    Vector<u8> m_raw;
 };
 
 class Node;
@@ -66,12 +66,12 @@ public:
         , m_data(value)
     {
     }
-    NodeData(AK::String const& value)
+    NodeData(String const& value)
         : m_type(Type::String)
         , m_data(value)
     {
     }
-    NodeData(AK::Vector<NodeData> const& value)
+    NodeData(Vector<NodeData> const& value)
         : m_type(Type::Package)
         , m_data(value)
     {
@@ -79,11 +79,11 @@ public:
 
     Type type() const { return m_type; }
 
-    AK::ErrorOr<i64> as_integer();
+    ErrorOr<i64> as_integer();
 
 protected:
     Type m_type { Type::None };
-    AK::Variant<AK::String, i8, i16, i32, i64, Buffer, AK::Vector<NodeData>> m_data;
+    Variant<String, i8, i16, i32, i64, Buffer, Vector<NodeData>> m_data;
 };
 
 }
