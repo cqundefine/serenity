@@ -195,6 +195,20 @@ ErrorOr<void> Interpreter::process_def_name(TableReader& reader, ParseFrame cons
     return {};
 }
 
+ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader, ParseFrame const& frame)
+{
+    // DefOpRegion := OpRegionOp NameString RegionSpace RegionOffset RegionLen
+    auto path = TRY(NameString::from_reader(reader));
+
+    auto region_space = reader.byte();
+    auto region_offset = TRY(TRY(read_term_arg(reader, frame)).as_integer());
+    auto region_length = TRY(TRY(read_term_arg(reader, frame)).as_integer());
+
+    auto node = make_ref_counted<OperationRegionNode>(region_space, region_offset, region_length);
+    TRY(insert_node(path, frame.node(), node));
+    return {};
+}
+
 ErrorOr<NodeData> Interpreter::read_def_buffer(TableReader& reader, ParseFrame const& frame)
 {
     // DefBuffer := BufferOp PkgLength BufferSize ByteList
@@ -325,20 +339,6 @@ ErrorOr<NodeData> Interpreter::read_computational_data(TableReader& reader, Pars
     UNIMPLEMENTED_OPCODE("read_computational_data", opcode);
 }
 
-ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader, ParseFrame const& frame)
-{
-    // DefOpRegion := OpRegionOp NameString RegionSpace RegionOffset RegionLen
-    auto path = TRY(NameString::from_reader(reader));
-
-    auto region_space = reader.byte();
-    auto region_offset = TRY(TRY(read_term_arg(reader, frame)).as_integer());
-    auto region_length = TRY(TRY(read_term_arg(reader, frame)).as_integer());
-
-    auto node = make_ref_counted<OperationRegionNode>(region_space, region_offset, region_length);
-    TRY(insert_node(path, frame.node(), node));
-    return {};
-}
-
 void Interpreter::push_parse_frame(ParseFrame const& frame)
 {
     dbgln("[LibACPI] Interpreter::push_parse_frame: Entering parse frame {} with end at {:X}", frame.node()->name().to_string_view(), frame.end());
@@ -411,10 +411,15 @@ ErrorOr<RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
         auto frame = m_parse_frames[m_parse_frames.size() - 1];
         TRY(read_term(reader, frame));
 
-        frame = m_parse_frames[m_parse_frames.size() - 1];
-        if (reader.position() >= frame.end()) {
-            (void)pop_parse_frame();
-        }
+        // Pop all frames that have run out.
+        // Frame variable gets reloaded as read_term may change the current scope,
+        // and that scope may be empty.
+        do {
+            frame = m_parse_frames[m_parse_frames.size() - 1];
+            if (reader.position() >= frame.end()) {
+                (void)pop_parse_frame();
+            }
+        } while (reader.position() >= frame.end());
     }
 
     warnln("Length: {}, Position: {}, Left over: {}", table_length, reader.position(), table_length - reader.position());
