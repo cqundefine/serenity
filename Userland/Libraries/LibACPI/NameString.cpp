@@ -24,7 +24,7 @@ ErrorOr<NameSegment> NameSegment::from_string_view(StringView view)
     return NameSegment({ view[0], view[1], view[2], view[3] });
 }
 
-StringView NameSegment::to_string_view()
+StringView NameSegment::to_string_view() const
 {
     StringView view(m_data.data(), 4);
     return view;

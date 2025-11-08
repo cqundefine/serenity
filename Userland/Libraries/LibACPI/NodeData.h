@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include <AK/String.h>
 #include <AK/Types.h>
 #include <AK/Variant.h>
@@ -80,6 +81,7 @@ public:
     Type type() const { return m_type; }
 
     ErrorOr<i64> as_integer();
+    ErrorOr<Buffer*> as_buffer_ptr();
 
 protected:
     Type m_type { Type::None };

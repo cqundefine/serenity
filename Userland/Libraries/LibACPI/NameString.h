@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include "TableReader.h"
 #include <AK/Result.h>
 #include <AK/String.h>
@@ -23,7 +24,7 @@ public:
     friend bool operator==(NameSegment const& l, NameSegment const& r) { return l.m_data == r.m_data; }
     friend bool operator!=(NameSegment const& l, NameSegment const& r) { return l.m_data != r.m_data; }
 
-    StringView to_string_view();
+    StringView to_string_view() const;
 
 protected:
     friend class NameString;

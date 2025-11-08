@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include <AK/Array.h>
 #include <AK/MemoryStream.h>
 #include <AK/StringView.h>

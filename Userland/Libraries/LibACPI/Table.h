@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include "BlockHeader.h"
 #include "Node.h"
 

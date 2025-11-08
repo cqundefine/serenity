@@ -10,6 +10,7 @@ namespace ACPI {
 
 ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const& scope)
 {
+    dbgln("[LibACPI] Node::find_node: Request to find path '{}' in node {}.", TRY(path.to_string()), scope->name().to_string_view());
     auto target = scope;
     if (path.type() == NameString::Type::Relative && path.depth() > 0) {
         // Move up through the tree.
@@ -46,6 +47,7 @@ ErrorOr<RefPtr<Node>> Node::find_child(NameSegment name) const
     }
 
     if (child.is_null()) {
+        warnln("[LibACPI] Node::find_child: Child {} does not exist relative to node {}!", name.to_string_view(), m_name.to_string_view());
         return Error::from_string_literal("Child does not exist.");
     }
     return child;
@@ -187,7 +189,7 @@ void NameNode::write_description(StringBuilder& builder)
     case NodeData::Type::DWord:
     case NodeData::Type::QWord: {
         auto value = m_data.as_integer().release_value_but_fixme_should_propagate_errors();
-        builder.appendff(" with value {}, or 0x{:X}", value, value);
+        builder.appendff("({}, 0x{:X})", value, value);
         break;
     }
     default:
@@ -200,4 +202,8 @@ void MethodNode::write_description(StringBuilder& builder)
     builder.appendff("Method(Args: {}, Start: {}, End: {}, Flags: {})", arguments(), start(), end(), flags());
 }
 
+void BufferFieldNode::write_description(StringBuilder& builder)
+{
+    builder.appendff("BufferField(Offset: {}, Size: {}, ptr: {})", m_bit_offset, m_bit_size, m_buffer_ptr);
+}
 }

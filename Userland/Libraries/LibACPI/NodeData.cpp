@@ -20,8 +20,15 @@ ErrorOr<i64> NodeData::as_integer()
     case NodeData::Type::QWord:
         return static_cast<i64>(m_data.get<i64>());
     default:
-        return Error::from_string_literal("Unimplemented cast!");
+        return Error::from_string_view_or_print_error_and_return_errno("Can not cast given type to integer!"sv, EINVAL);
     }
+}
+
+ErrorOr<Buffer*> NodeData::as_buffer_ptr()
+{
+    if (m_type == NodeData::Type::Buffer)
+        return m_data.get_pointer<Buffer>();
+    return Error::from_string_view_or_print_error_and_return_errno("Can not cast given type to buffer!"sv, EINVAL);
 }
 
 }

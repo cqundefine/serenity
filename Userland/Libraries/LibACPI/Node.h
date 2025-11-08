@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include "NameString.h"
 #include "NodeData.h"
 #include <AK/Array.h>
@@ -12,6 +13,18 @@
 #include <AK/Variant.h>
 
 namespace ACPI {
+
+enum class NodeType : u8 {
+    Untyped,
+    Device,
+    Scope,
+    Name,
+    OperationRegion,
+    Field,
+    BufferField,
+    Method,
+    Processor
+};
 
 class Node : public RefCounted<Node> {
 public:
@@ -32,9 +45,10 @@ public:
     RefPtr<Node> parent() const { return m_parent; }
     RefPtr<Node> child() const { return m_child; }
     RefPtr<Node> neighbour() const { return m_neighbour; }
+    virtual void write_description(StringBuilder& builder) { builder.append(kind()); }
 
-    virtual void write_description(StringBuilder& builder) { builder.append(type()); }
-    virtual StringView type() const { return "Node"sv; }
+    virtual NodeType type() const { return NodeType::Untyped; }
+    virtual StringView kind() const { return "Node"sv; }
     virtual ~Node() { }
 
 protected:
@@ -65,7 +79,8 @@ public:
     }
     ~DeviceNode() = default;
 
-    StringView type() const override { return "Device"sv; }
+    NodeType type() const override { return NodeType::Device; }
+    StringView kind() const override { return "Device"sv; }
 };
 
 class ScopeNode : public Node {
@@ -76,7 +91,8 @@ public:
     }
     ~ScopeNode() = default;
 
-    StringView type() const override { return "Scope"sv; }
+    NodeType type() const override { return NodeType::Scope; }
+    StringView kind() const override { return "Scope"sv; }
 };
 
 class NameNode : public Node {
@@ -89,7 +105,8 @@ public:
     ~NameNode() = default;
 
     void write_description(StringBuilder& builder) override;
-    StringView type() const override { return "Name"sv; }
+    NodeType type() const override { return NodeType::Name; }
+    StringView kind() const override { return "Name"sv; }
 
 protected:
     NodeData m_data;
@@ -104,7 +121,9 @@ public:
     {
     }
     ~OperationRegionNode() = default;
-    StringView type() const override { return "Op. Region"sv; }
+
+    NodeType type() const override { return NodeType::OperationRegion; }
+    StringView kind() const override { return "Op. Region"sv; }
 
 protected:
     u8 m_space;
@@ -134,12 +153,33 @@ public:
     {
     }
     ~FieldNode() = default;
-    StringView type() const override { return "Field"sv; }
+    NodeType type() const override { return NodeType::Field; }
+    StringView kind() const override { return "Field"sv; }
 
     Field field() const { return m_field; }
 
 protected:
     Field m_field;
+};
+
+class BufferFieldNode : public Node {
+public:
+    BufferFieldNode(Buffer* buffer_ptr, int bit_offset, int bit_size)
+        : m_buffer_ptr(buffer_ptr)
+        , m_bit_offset(bit_offset)
+        , m_bit_size(bit_size)
+    {
+    }
+    ~BufferFieldNode() = default;
+
+    virtual void write_description(StringBuilder& builder) override;
+    NodeType type() const override { return NodeType::BufferField; }
+    StringView kind() const override { return "BufferField"sv; }
+
+protected:
+    Buffer* m_buffer_ptr;
+    int m_bit_offset;
+    int m_bit_size;
 };
 
 class MethodNode : public Node {
@@ -153,7 +193,8 @@ public:
     ~MethodNode() = default;
 
     void write_description(StringBuilder& builder) override;
-    StringView type() const override { return "Method"sv; }
+    NodeType type() const override { return NodeType::Method; }
+    StringView kind() const override { return "Method"sv; }
 
     size_t start() const { return m_start; }
     size_t end() const { return m_end; }
@@ -174,7 +215,9 @@ public:
         , m_block_length(block_length)
     {
     }
-    StringView type() const override { return "Processor (Depr.)"sv; }
+
+    NodeType type() const override { return NodeType::Processor; }
+    StringView kind() const override { return "Processor (Depr.)"sv; }
 
 protected:
     u32 m_address { 0 };

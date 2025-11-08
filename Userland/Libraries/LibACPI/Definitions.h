@@ -5,6 +5,7 @@
  */
 
 #pragma once
+
 #include <AK/Types.h>
 
 enum class Prefix : u8 {
@@ -24,6 +25,13 @@ enum class Opcode : u16 {
     PackageOp = 0x0012,
     VarPackageOp = 0x0013,
     MethodOp = 0x0014,
+
+    CreateDWordFieldOp = 0x8A,
+    CreateWordFieldOp = 0x8B,
+    CreateByteFieldOp = 0x8C,
+    CreateBitFieldOp = 0x8D,
+    CreateQWordFieldOp = 0x8F,
+
     RevisionOp = 0x5B30,
 
     Local0Op = 0x0060,

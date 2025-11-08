@@ -16,7 +16,6 @@ namespace ACPI {
 
 #define UNIMPLEMENTED_OPCODE(fn, op)                                \
     do {                                                            \
-        m_table->print_namespace();                                 \
         warnln("[LibACPI] Interpreter::" fn ": Opcode {:04X}", op); \
         return Error::from_string_literal("Unimplemented");         \
     } while (0)
@@ -49,6 +48,11 @@ ErrorOr<void> Interpreter::insert_node(NameString const& path, RefPtr<Node> cons
     return {};
 }
 
+ErrorOr<RefPtr<Node>> Interpreter::find_node(NameString const& path, RefPtr<Node> const& scope)
+{
+    return Node::find_node(path, scope);
+}
+
 ErrorOr<void> Interpreter::process_def_method(TableReader& reader, ParseFrame const& frame)
 {
     // DefMethod := MethodOp PkgLength NameString MethodFlags TermList
@@ -75,7 +79,7 @@ ErrorOr<void> Interpreter::process_def_scope(TableReader& reader, ParseFrame con
     auto name_string = TRY(NameString::from_reader(reader));
     auto scope = TRY(Node::find_node(name_string, frame.node()));
 
-    auto f = ParseFrame(scope, start + package_length);
+    auto f = ParseFrame(scope, reader.position(), start + package_length);
     push_parse_frame(f);
 
     return {};
@@ -91,7 +95,7 @@ ErrorOr<void> Interpreter::process_def_device(TableReader& reader, ParseFrame co
     auto node = make_ref_counted<DeviceNode>();
     TRY(insert_node(path, frame.node(), node));
 
-    auto new_frame = ParseFrame(node, start + package_length);
+    auto new_frame = ParseFrame(node, reader.position(), start + package_length);
     push_parse_frame(new_frame);
 
     return {};
@@ -111,7 +115,7 @@ ErrorOr<void> Interpreter::process_def_processor(TableReader& reader, ParseFrame
     TRY(insert_node(path, frame.node(), node));
 
     // FIXME: Figure out what can actually be inside a Processor node.
-    auto new_frame = ParseFrame(node, start + package_length);
+    auto new_frame = ParseFrame(node, reader.position(), start + package_length);
     push_parse_frame(new_frame);
 
     return {};
@@ -209,6 +213,46 @@ ErrorOr<void> Interpreter::process_def_operation_region(TableReader& reader, Par
     return {};
 }
 
+ErrorOr<void> Interpreter::process_def_unit_field(TableReader& reader, ParseFrame const& frame, u16 opcode)
+{
+    // DefCreateByteField  := CreateByteFieldOp SourceBuff ByteIndex NameString
+    // DefCreateWordField  := CreateWordFieldOp SourceBuff ByteIndex NameString
+    // DefCreateDWordField := CreateDWordFieldOp SourceBuff ByteIndex NameString
+    // DefCreateQWordField := CreateQWordFieldOp SourceBuff ByteIndex NameString
+    // DefCreateBitField   := CreateBitFieldOp SourceBuff ByteIndex NameString
+
+    auto buffer_ptr = TRY(TRY(read_term_arg(reader, frame)).as_buffer_ptr());
+    auto index = TRY(TRY(read_term_arg(reader, frame)).as_integer());
+    auto path = TRY(NameString::from_reader(reader));
+    warnln("Adding BufferField at {}", TRY(path.to_string()));
+
+    int bit_size = 0;
+    switch (opcode) {
+    case (u16)Opcode::CreateBitFieldOp:
+        bit_size = 1;
+        break;
+    case (u16)Opcode::CreateByteFieldOp:
+        bit_size = 8;
+        break;
+    case (u16)Opcode::CreateWordFieldOp:
+        bit_size = 16;
+        break;
+    case (u16)Opcode::CreateDWordFieldOp:
+        bit_size = 32;
+        break;
+    case (u16)Opcode::CreateQWordFieldOp:
+        bit_size = 64;
+        break;
+    default:
+        return Error::from_string_literal("Invalid buffer field opcode!");
+    }
+    auto bit_offset = index * (bit_size == 1 ? 1 : 8);
+
+    auto node = make_ref_counted<BufferFieldNode>(buffer_ptr, bit_offset, bit_size);
+    TRY(insert_node(path, frame.node(), node));
+    return {};
+}
+
 ErrorOr<NodeData> Interpreter::read_def_buffer(TableReader& reader, ParseFrame const& frame)
 {
     // DefBuffer := BufferOp PkgLength BufferSize ByteList
@@ -293,14 +337,51 @@ ErrorOr<NodeData> Interpreter::read_data_ref_object(TableReader& reader, ParseFr
     UNIMPLEMENTED_OPCODE("read_data_ref_object", opcode);
 }
 
+ErrorOr<RefPtr<MethodNode>> Interpreter::find_method(NameString const& path, RefPtr<Node> const& scope)
+{
+    auto node = TRY(find_node(path, scope));
+    if (node->type() != NodeType::Method) {
+        return Error::from_string_view_or_print_error_and_return_errno("Expected method!"sv, EINVAL);
+    }
+    return static_ptr_cast<MethodNode>(node);
+}
+
+ErrorOr<NodeData> Interpreter::read_expression_opcode(TableReader& reader, ParseFrame const& frame, u16 opcode)
+{
+    if (TableReader::is_lead_name_char(opcode)) {
+        // MethodInvocation := NameString TermArgList
+        auto path = TRY(NameString::from_reader(reader));
+        auto method = TRY(find_method(path, frame.node()));
+
+        ParseFrame frame(method, method->start(), method->end());
+        // TermArgList := Nothing | <termarg termarglist>
+        for (int i = 0; i < method->arguments(); i++) {
+            auto argument = TRY(read_term_arg(reader, frame));
+            TRY(frame.set_argument(i, argument));
+        }
+
+        push_parse_frame(frame);
+    }
+    return Error::from_errno(EINVAL);
+}
+
 ErrorOr<NodeData> Interpreter::read_term_arg(TableReader& reader, ParseFrame const& frame)
 {
     // TermArg := ExpressionOpcode | DataObject | ArgObj | LocalObj
-    u16 opcode = reader.byte();
+    u16 opcode = reader.peek();
+    if (!TableReader::is_lead_name_char(opcode)) {
+        opcode = reader.byte();
+    }
 
-    auto data_object = read_data_object(reader, frame, opcode);
-    if (!data_object.is_error())
-        return data_object.release_value();
+    auto object = read_expression_opcode(reader, frame, opcode);
+    if (!object.is_error()) {
+        return object.release_value();
+    }
+
+    object = read_data_object(reader, frame, opcode);
+    if (!object.is_error()) {
+        return object.release_value();
+    }
 
     UNIMPLEMENTED_OPCODE("read_term_arg", opcode);
 }
@@ -398,7 +479,7 @@ ErrorOr<RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
 
     m_table = table;
 
-    auto root_frame = ParseFrame(m_table->namespace_root(), length);
+    auto root_frame = ParseFrame(m_table->namespace_root(), length, length);
     push_parse_frame(root_frame);
 
     for (;;) {
@@ -418,8 +499,9 @@ ErrorOr<RefPtr<Table>> Interpreter::interpret(u8* buffer, size_t length)
             frame = m_parse_frames[m_parse_frames.size() - 1];
             if (reader.position() >= frame.end()) {
                 (void)pop_parse_frame();
+                reader.set_position(frame.start());
             }
-        } while (reader.position() >= frame.end());
+        } while (m_parse_frames.size() != 0 && (reader.position() >= frame.end()));
     }
 
     warnln("Length: {}, Position: {}, Left over: {}", table_length, reader.position(), table_length - reader.position());
@@ -458,6 +540,13 @@ ErrorOr<void> Interpreter::read_term(TableReader& reader, ParseFrame const& fram
         break;
     case Opcode::ProcessorOp:
         TRY(process_def_processor(reader, frame));
+        break;
+    case Opcode::CreateBitFieldOp:
+    case Opcode::CreateByteFieldOp:
+    case Opcode::CreateWordFieldOp:
+    case Opcode::CreateDWordFieldOp:
+    case Opcode::CreateQWordFieldOp:
+        TRY(process_def_unit_field(reader, frame, opcode));
         break;
     default:
         UNIMPLEMENTED_OPCODE("read_term", opcode);
