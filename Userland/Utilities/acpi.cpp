@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <LibACPI/Interpreter.h>
 #include <LibCore/ArgsParser.h>
 #include <LibCore/System.h>
 #include <LibFileSystem/FileSystem.h>
 #include <LibMain/Main.h>
-#include <LibACPI/Interpreter.h>
 
 ErrorOr<int> serenity_main(Main::Arguments arguments)
 {
@@ -26,8 +26,7 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
         return Error::from_string_literal("Input file is required, use '-' to read from standard input");
 
     auto result = Core::File::open_file_or_standard_stream(input, Core::File::OpenMode::Read);
-    if (result.is_error())
-    {
+    if (result.is_error()) {
         warnln("Failed to open {}: {}", input, result.release_error());
         return 1;
     }
