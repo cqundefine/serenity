@@ -75,6 +75,15 @@ public:
         return span;
     }
 
+    template<typename T>
+    ErrorOr<T> peek_value()
+    {
+        auto previous = offset();
+        T value = TRY(read_value<T>());
+        TRY(seek(previous));
+        return value;
+    }
+
 private:
     Bytes m_bytes;
     size_t m_offset { 0 };
