@@ -19,6 +19,7 @@ enum class Opcode : u16 {
     OneOp = 0x0001,
     OnesOp = 0x00FF,
 
+    AliasOp = 0x0006,
     NameOp = 0x0008,
     ScopeOp = 0x0010,
     BufferOp = 0x0011,
@@ -31,8 +32,6 @@ enum class Opcode : u16 {
     CreateByteFieldOp = 0x8C,
     CreateBitFieldOp = 0x8D,
     CreateQWordFieldOp = 0x8F,
-
-    RevisionOp = 0x5B30,
 
     Local0Op = 0x0060,
     Local1Op = 0x0061,
@@ -50,10 +49,17 @@ enum class Opcode : u16 {
     Arg5Op = 0x006D,
     Arg6Op = 0x006E,
 
+    ShiftLeftOp = 0x79,
+
+    MutexOp = 0x5B01,
+    RevisionOp = 0x5B30,
+    DebugOp = 0x5B31,
+
     OpRegionOp = 0x5B80,
     FieldOp = 0x5B81,
     DeviceOp = 0x5B82,
     ProcessorOp = 0x5B83,
+    ThermalZoneOp = 0x5B85,
 
     // Inside opcodes enum for ease of interpretation
     BytePrefix = 0x0A,

@@ -6,93 +6,131 @@
 
 #pragma once
 
-#include "Table.h"
-#include "TableReader.h"
+#include "Node.h"
+#include "OpcodeFrame.h"
+#include "TableStream.h"
 #include <AK/Error.h>
-#include <AK/OwnPtr.h>
-#include <AK/String.h>
-#include <AK/Variant.h>
 #include <AK/Vector.h>
 
 namespace ACPI {
 
-class ParseFrame {
+enum class IntegerKind : u8 {
+    Byte,
+    Word,
+    DWord,
+    QWord
+};
+
+struct InterpreterCallbacks {
+    Function<ErrorOr<u64>(IntegerKind kind, size_t address)> on_read_system_memory;
+    Function<ErrorOr<void>(IntegerKind kind, size_t address, u64 value)> on_write_system_memory;
+};
+
+template<typename T, bool D>
+class FrameStack {
 public:
-    ParseFrame(RefPtr<Node> const& scope, size_t start, size_t end)
-        : m_scope(scope)
+    size_t size() const
+    {
+        return m_items.size();
+    }
+
+    T pop()
+    {
+        if constexpr (D) {
+            dbgln("[LibACPI] FrameStack: Popping frame.");
+        }
+
+        T item = m_items[m_items.size() - 1];
+        m_items.remove(m_items.size() - 1);
+        return item;
+    }
+
+    T& top()
+    {
+        return m_items[m_items.size() - 1];
+    }
+
+    T& at(size_t index)
+    {
+        return m_items.at(index);
+    }
+
+    void push(T item)
+    {
+        if constexpr (D) {
+            dbgln("[LibACPI] FrameStack: Pushing frame.");
+        }
+        m_items.append(item);
+    }
+
+private:
+    Vector<T> m_items;
+};
+
+class ScopeFrame {
+public:
+    ScopeFrame(RefPtr<Node> root, RefPtr<Node> scope, size_t start, size_t end, size_t table_index)
+        : m_root(move(root))
+        , m_scope(move(scope))
         , m_start(start)
         , m_end(end)
+        , m_table_index(table_index)
     {
     }
 
-    RefPtr<ACPI::Node> node() const { return m_scope; }
+    ErrorOr<RefPtr<Node>> find_node(NameString const& path);
+    ErrorOr<void> insert_node(NameString const& path, RefPtr<Node> const& node);
+
+    RefPtr<Node> root() { return m_root; }
+    RefPtr<Node> scope() { return m_scope; }
     size_t start() const { return m_start; }
     size_t end() const { return m_end; }
-
-    ErrorOr<NodeData> argument(size_t i) const
-    {
-        if (i >= m_arguments.size()) {
-            return Error::from_string_view_or_print_error_and_return_errno("Argument index out of bounds!"sv, EINVAL);
-        }
-
-        return m_arguments[i];
-    }
-    ErrorOr<void> set_argument(size_t i, NodeData data)
-    {
-        if (i >= m_arguments.size()) {
-            return Error::from_string_view_or_print_error_and_return_errno("Argument index out of bounds!"sv, EINVAL);
-        }
-
-        m_arguments[i] = move(data);
-        return {};
-    }
+    size_t size() const { return m_end - m_start; }
 
 protected:
-    Array<NodeData, 8> m_arguments;
-    RefPtr<ACPI::Node> m_scope;
-    size_t m_start;
-    size_t m_end;
+    RefPtr<Node> m_root, m_scope;
+    size_t m_start, m_end, m_table_index;
 };
 
 class Interpreter {
 public:
-    Interpreter()
-        : m_table(nullptr)
+    Interpreter(InterpreterCallbacks& callbacks)
+        : m_callbacks(callbacks)
     {
     }
-    ErrorOr<RefPtr<ACPI::Table>> interpret(u8* buffer, size_t length);
+
+    ErrorOr<void> load(TableStream const& stream, bool ignore_block_header);
+    ErrorOr<NodeData> evaluate(NameString const& path);
+    void print_namespace() const;
 
 protected:
-    Vector<ParseFrame> m_parse_frames;
-    RefPtr<ACPI::Table> m_table;
+    enum class State : u8 {
+        ReadingOpcode,
+        ReadingOperand,
+        FinalizingOpcode
+    };
 
-    void push_parse_frame(ParseFrame const& frame);
-    ParseFrame pop_parse_frame();
+    ErrorOr<NodeData> evaluate(RefPtr<Node> node);
+    ErrorOr<void> evaluate(RefPtr<Node> node, NodeData value_to_write);
 
-    ErrorOr<void> read_term(TableReader& reader, ParseFrame const& frame);
+    ErrorOr<void> initialize_namespace();
+    ErrorOr<IterationDecision> cycle(TableStream& stream);
+    ErrorOr<IterationDecision> read_operand(TableStream& stream, MetaOpcode operand);
 
-    ErrorOr<RefPtr<MethodNode>> find_method(NameString const& path, RefPtr<Node> const& scope);
-    ErrorOr<RefPtr<Node>> find_node(NameString const& path, RefPtr<Node> const& scope);
-    ErrorOr<void> insert_node(NameString const& path, RefPtr<Node> const& scope, RefPtr<Node> const& node);
+    ErrorOr<NodeData> finalize_value_opcode(OpcodeFrame& frame);
+    ErrorOr<void> finalize_term_opcode(OpcodeFrame& frame, TableStream& stream);
 
-    ErrorOr<u32> read_name_segment(TableReader& reader);
-    ErrorOr<NodeData> read_computational_data(TableReader& reader, ParseFrame const& frame, u16 opcode);
-    ErrorOr<NodeData> read_data_ref_object(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<NodeData> read_data_object(TableReader& reader, ParseFrame const& frame, u16 opcode);
-    ErrorOr<NodeData> read_expression_opcode(TableReader& reader, ParseFrame const& frame, u16 opcode);
-    ErrorOr<NodeData> read_def_buffer(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<NodeData> read_term_arg(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<NodeData> read_package(TableReader& reader, ParseFrame const& frame, u16 opcode);
+    void debug_print_header(TableStream& stream, size_t operand_index = 0);
+    void print_node(RefPtr<Node> const& node, int depth) const;
 
-    ErrorOr<void> process_field_element(TableReader& reader, ParseFrame const& frame, Field const& field);
-    ErrorOr<void> process_def_name(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_scope(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_device(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_operation_region(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_field(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_unit_field(TableReader& reader, ParseFrame const& frame, u16 opcode);
-    ErrorOr<void> process_def_method(TableReader& reader, ParseFrame const& frame);
-    ErrorOr<void> process_def_processor(TableReader& reader, ParseFrame const& frame);
+    State m_state { State::ReadingOpcode };
+
+    AK::Vector<TableStream> m_loaded_tables;
+    FrameStack<ScopeFrame, false> m_scope_frames;
+    FrameStack<OpcodeFrame, false> m_opcode_frames;
+
+    RefPtr<Node> m_namespace_root;
+    InterpreterCallbacks& m_callbacks;
 };
 
 }

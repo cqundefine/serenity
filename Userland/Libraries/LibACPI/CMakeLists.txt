@@ -1,9 +1,9 @@
 set(SOURCES
-    TableReader.cpp
-    Table.cpp
+    TableStream.cpp
     NameString.cpp
     Node.cpp
     NodeData.cpp
+    OpcodeFrame.cpp
     Interpreter.cpp
 )
 serenity_lib(LibACPI acpi)

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "NameString.h"
 #include <AK/String.h>
 #include <AK/Types.h>
 #include <AK/Variant.h>
@@ -14,13 +15,15 @@ namespace ACPI {
 
 class Buffer {
 public:
-    Buffer(Vector<u8> data)
-        : m_raw(move(data))
+    Buffer(ByteBuffer buffer)
+        : m_buffer(move(buffer))
     {
     }
 
+    ByteBuffer& buffer() { return m_buffer; }
+
 protected:
-    Vector<u8> m_raw;
+    ByteBuffer m_buffer;
 };
 
 class Node;
@@ -28,13 +31,11 @@ class NodeData {
 public:
     enum class Type : u8 {
         None,
-        Byte,
-        Word,
-        DWord,
-        QWord,
+        Integer,
         String,
         Buffer,
-        Package
+        Package,
+        NameString
     };
 
     NodeData()
@@ -42,23 +43,8 @@ public:
         , m_data(0)
     {
     }
-    NodeData(i8 value)
-        : m_type(Type::Byte)
-        , m_data(value)
-    {
-    }
-    NodeData(i16 value)
-        : m_type(Type::Word)
-        , m_data(value)
-    {
-    }
-    NodeData(i32 value)
-        : m_type(Type::DWord)
-        , m_data(value)
-    {
-    }
     NodeData(i64 value)
-        : m_type(Type::QWord)
+        : m_type(Type::Integer)
         , m_data(value)
     {
     }
@@ -67,7 +53,7 @@ public:
         , m_data(value)
     {
     }
-    NodeData(String const& value)
+    NodeData(ByteBuffer const& value)
         : m_type(Type::String)
         , m_data(value)
     {
@@ -77,15 +63,25 @@ public:
         , m_data(value)
     {
     }
+    NodeData(NameString const& value)
+        : m_type(Type::NameString)
+        , m_data(value)
+    {
+    }
 
     Type type() const { return m_type; }
 
+    ErrorOr<NameString> as_namestring();
     ErrorOr<i64> as_integer();
+
+    ErrorOr<StringView> as_string_view();
+    ErrorOr<ByteBuffer> as_string_raw();
+
     ErrorOr<Buffer*> as_buffer_ptr();
 
 protected:
     Type m_type { Type::None };
-    Variant<String, i8, i16, i32, i64, Buffer, Vector<NodeData>> m_data;
+    Variant<NameString, ByteBuffer, i64, Buffer, Vector<NodeData>> m_data;
 };
 
 }

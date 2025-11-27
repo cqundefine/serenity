@@ -6,6 +6,7 @@
 
 #include "NameString.h"
 #include "Definitions.h"
+#include "TableStream.h"
 
 namespace ACPI {
 
@@ -16,12 +17,22 @@ NameSegment::NameSegment(Array<char, 4> value)
 
 ErrorOr<NameSegment> NameSegment::from_string_view(StringView view)
 {
-    if (!TableReader::is_lead_name_char(view[0]) || !TableReader::is_name_char(view[1]) || !TableReader::is_name_char(view[2]) || !TableReader::is_name_char(view[3])) {
+    if (!TableStream::is_lead_name_char(view[0]) || !TableStream::is_name_char(view[1]) || !TableStream::is_name_char(view[2]) || !TableStream::is_name_char(view[3])) {
         warnln("[LibACPI] Invalid character found inside name segment: '{}'", view);
         return Error::from_string_literal("Invalid character found inside name segment.");
     }
 
-    return NameSegment({ view[0], view[1], view[2], view[3] });
+    return NameSegment({ (char)view[0], (char)view[1], (char)view[2], (char)view[3] });
+}
+
+ErrorOr<NameSegment> NameSegment::from_readonly_bytes(ReadonlyBytes span)
+{
+    if (!TableStream::is_lead_name_char(span[0]) || !TableStream::is_name_char(span[1]) || !TableStream::is_name_char(span[2]) || !TableStream::is_name_char(span[3])) {
+        warnln("[LibACPI] Invalid character found inside name segment: '{}'", span);
+        return Error::from_string_literal("Invalid character found inside name segment.");
+    }
+
+    return NameSegment({ (char)span[0], (char)span[1], (char)span[2], (char)span[3] });
 }
 
 StringView NameSegment::to_string_view() const
@@ -30,7 +41,7 @@ StringView NameSegment::to_string_view() const
     return view;
 }
 
-ErrorOr<NameString> NameString::from_reader(TableReader& reader)
+ErrorOr<NameString> NameString::from_table_stream(TableStream& stream)
 {
     Type type = Type::Relative;
     size_t depth = 0;
@@ -38,67 +49,66 @@ ErrorOr<NameString> NameString::from_reader(TableReader& reader)
     u8 initial = 0;
 
     // Figure out path type.
-    initial = reader.peek();
+    initial = TRY(stream.peek_value<u8>());
     if (initial == '\\') {
-        dbgln("[LibACPI] NameString::from_reader: Absolute path.");
+        // dbgln("[LibACPI] NameString::from_reader: Absolute path.");
         type = Type::Absolute;
-        reader.byte();
+        TRY(stream.read_value<u8>());
     } else if (initial == '^') {
         do {
             depth++;
-            reader.byte();
-            initial = reader.peek();
-        } while (initial == '^' && !reader.is_eof());
+            TRY(stream.read_value<u8>());
+            initial = TRY(stream.peek_value<u8>());
+        } while (initial == '^' && !stream.is_eof());
 
-        reader.byte();
-        dbgln("[LibACPI] NameString::from_reader: Relative path, depth={}.", depth);
+        // dbgln("[LibACPI] NameString::from_reader: Relative path, depth={}.", depth);
     } else {
-        dbgln("[LibACPI] NameString::from_reader: Relative path, zero depth.");
+        // dbgln("[LibACPI] NameString::from_reader: Relative path, zero depth.");
     }
 
     // Figure out how many segments are in the path.
     // NamePath := NameSeg | DualNamePath | MultiNamePath | NullName
-    initial = reader.peek();
+    initial = TRY(stream.peek_value<u8>());
     switch (initial) {
     case 0:
         // dbgln("[LibACPI] NameString::from_reader: Null name path.");
-        reader.byte();
+        TRY(stream.read_value<u8>());
         return NameString(type, depth);
 
     case (u8)Prefix::MultiNamePrefix:
-        reader.byte();
+        TRY(stream.read_value<u8>());
+        count = TRY(stream.read_value<u8>());
 
-        count = reader.byte();
         if (count == 0) {
             return Error::from_string_literal("Multiname path must have at least 1 item.");
         }
         break;
 
     case (u8)Prefix::DualNamePrefix:
+        TRY(stream.read_value<u8>());
         count = 2;
-        reader.byte();
         break;
 
     default:
-        if (TableReader::is_lead_name_char(initial)) {
+        if (TableStream::is_lead_name_char(initial)) {
             count = 1;
             break;
         } else {
-            warnln("[LibACPI] Invalid character: '{:X}' at position {:X}", (char)initial, reader.position());
+            warnln("[LibACPI] Invalid character: '{:X}' at offset {:X}", (char)initial, stream.offset());
             return Error::from_string_literal("Invalid character found.");
         }
     }
 
     // Validate items inside remaining path..
-    auto view = reader.string_view(count * 4);
+    auto span = TRY(stream.read_in_place<u8>(count * 4));
     for (size_t i = 0; i < count; i++) {
-        auto item = view.substring_view(i * 4, 4);
-        if (!TableReader::is_lead_name_char(item[0]) || !TableReader::is_name_char(item[1]) || !TableReader::is_name_char(item[2]) || !TableReader::is_name_char(item[3])) {
+        auto item = span.slice(i * 4, 4);
+        if (!TableStream::is_lead_name_char(item[0]) || !TableStream::is_name_char(item[1]) || !TableStream::is_name_char(item[2]) || !TableStream::is_name_char(item[3])) {
             warnln("[LibACPI] Invalid character found inside name segment: '{:X}'", item);
             return Error::from_string_literal("Invalid character found inside name segment.");
         }
     }
-    return NameString(type, depth, 0, count, view);
+    return NameString(type, depth, 0, count, span);
 }
 
 ErrorOr<NameString> NameString::from_string(StringView const& str)
@@ -137,7 +147,7 @@ ErrorOr<NameString> NameString::from_string(StringView const& str)
     // Validate segments, alongside separators.
     size_t segment_start = i;
     for (; i < str.length(); i += 5) {
-        if (!TableReader::is_lead_name_char(str[i]) || !TableReader::is_name_char(str[i + 1]) || !TableReader::is_name_char(str[i + 2]) || !TableReader::is_name_char(str[i + 3])) {
+        if (!TableStream::is_lead_name_char(str[i]) || !TableStream::is_name_char(str[i + 1]) || !TableStream::is_name_char(str[i + 2]) || !TableStream::is_name_char(str[i + 3])) {
             warnln("[LibACPI] Invalid character found inside name segment: '{}'", str);
             return Error::from_string_literal("Invalid character found inside name segment.");
         }
@@ -149,7 +159,8 @@ ErrorOr<NameString> NameString::from_string(StringView const& str)
     }
 
     // Eugh.
-    return NameString(type, depth, 1, count, str.substring_view(segment_start, count * 5));
+    auto view = str.substring_view(segment_start, count * 5);
+    return NameString(type, depth, 1, count, view.bytes());
 }
 
 ErrorOr<NameSegment> NameString::segment(std::size_t index) const
@@ -158,7 +169,7 @@ ErrorOr<NameSegment> NameString::segment(std::size_t index) const
         return Error::from_string_literal("Segment index out of bounds!");
     }
 
-    return NameSegment::from_string_view(m_name_sequence.substring_view(index * (4 + m_additional_unit_bytes), 4));
+    return NameSegment::from_readonly_bytes(m_name_sequence.slice(index * (4 + m_additional_unit_bytes), 4));
 }
 
 ErrorOr<String> NameString::to_string() const
@@ -194,6 +205,13 @@ ErrorOr<NameSegment> NameString::basename() const
         return Error::from_string_literal("NullNameString has no base name!");
     }
     return segment(m_count - 1);
+}
+
+NameString NameString::clone(ByteBuffer& buf)
+{
+    buf.resize(m_name_sequence.size());
+    m_name_sequence.copy_to(buf);
+    return NameString(m_type, m_depth, m_additional_unit_bytes, m_count, buf.bytes());
 }
 
 }

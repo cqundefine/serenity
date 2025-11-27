@@ -23,7 +23,84 @@ enum class NodeType : u8 {
     Field,
     BufferField,
     Method,
-    Processor
+    Processor,
+    Alias,
+    Mutex,
+    ThermalZone
+};
+
+enum class FieldAccess : u8 {
+    Any,
+    Byte,
+    Word,
+    DWord,
+    QWord,
+    Buffer,
+    Reserved0,
+    Reserved1,
+    Reserved2,
+    Reserved3,
+    Reserved4,
+    Reserved5,
+    Reserved6,
+    Reserved7,
+    Reserved8,
+    Reserved9,
+    ReservedA,
+};
+
+enum class FieldLock : u8 {
+    NoLock,
+    Lock
+};
+
+enum class FieldUpdateRule : u8 {
+    Preserve,
+    WriteAsOnes,
+    WriteAsZeros,
+    Reserved
+};
+
+enum class RegionSpace : u8 {
+    SystemMemory,
+    SystemIO,
+    PciConfig,
+    EmbeddedControl,
+    SMBus,
+    SystemCmos,
+    PciBarTarget,
+    IPMI,
+    GPIO,
+    GenericSerialBus,
+    PCC,
+    OemDefined
+};
+
+class Field {
+public:
+    Field(RefPtr<Node> const& operation_region, u8 flags, size_t offset, size_t size)
+        : m_operation_region(operation_region)
+        , m_flags(flags)
+        , m_offset(offset)
+        , m_size(size)
+    {
+    }
+
+    RefPtr<Node> const& operation_region() const { return m_operation_region; }
+    size_t offset() const { return m_offset; }
+    size_t size() const { return m_size; }
+
+    u8 flags() const { return m_flags; }
+
+    FieldLock lock() const { return (m_flags & 0x10) ? FieldLock::Lock : FieldLock::NoLock; }
+    FieldAccess access() const { return static_cast<FieldAccess>(m_flags & 0x0F); }
+    FieldUpdateRule update_rule() const { return static_cast<FieldUpdateRule>((m_flags >> 5) & 0b11); }
+
+protected:
+    RefPtr<Node> m_operation_region;
+    u8 m_flags;
+    size_t m_offset;
+    size_t m_size;
 };
 
 class Node : public RefCounted<Node> {
@@ -104,6 +181,7 @@ public:
     }
     ~NameNode() = default;
 
+    NodeData& data() { return m_data; }
     void write_description(StringBuilder& builder) override;
     NodeType type() const override { return NodeType::Name; }
     StringView kind() const override { return "Name"sv; }
@@ -112,38 +190,54 @@ protected:
     NodeData m_data;
 };
 
+class AliasNode : public Node {
+public:
+    AliasNode(NameString destination)
+        : Node(nullptr)
+        , m_destination_namestring(destination.clone(m_destination))
+    {
+    }
+
+    void write_description(StringBuilder& builder) override;
+    NodeType type() const override { return NodeType::Alias; }
+    StringView kind() const override { return "Alias"sv; }
+
+    NameString destination();
+
+protected:
+    ByteBuffer m_destination;
+    NameString m_destination_namestring;
+};
+
 class OperationRegionNode : public Node {
 public:
     OperationRegionNode(u8 region_space, i64 region_offset, i64 region_length)
-        : m_space(region_space)
+        : m_space_raw(region_space)
         , m_offset(region_offset)
         , m_length(region_length)
     {
     }
     ~OperationRegionNode() = default;
 
+    RegionSpace space() const
+    {
+        if (m_space_raw >= 0x80) {
+            return RegionSpace::OemDefined;
+        }
+        return static_cast<RegionSpace>(m_space_raw);
+    }
+    u8 space_raw() const { return m_space_raw; }
+
+    i64 offset() const { return m_offset; }
+    i64 length() const { return m_length; }
+
     NodeType type() const override { return NodeType::OperationRegion; }
     StringView kind() const override { return "Op. Region"sv; }
 
 protected:
-    u8 m_space;
+    u8 m_space_raw;
     i64 m_offset;
     i64 m_length;
-};
-
-class Field {
-public:
-    Field(RefPtr<Node> const& operation_region, u8 flags)
-        : m_operation_region(operation_region)
-        , m_flags(flags)
-    {
-    }
-    RefPtr<Node> const& operation_region() const { return m_operation_region; }
-    u8 flags() const { return m_flags; }
-
-protected:
-    RefPtr<Node> m_operation_region;
-    u8 m_flags;
 };
 
 class FieldNode : public Node {
@@ -184,8 +278,9 @@ protected:
 
 class MethodNode : public Node {
 public:
-    MethodNode(size_t start, size_t end, u8 flags)
-        : m_start(start)
+    MethodNode(ssize_t table_index, size_t start, size_t end, u8 flags)
+        : m_table_index(table_index)
+        , m_start(start)
         , m_end(end)
         , m_flags(flags)
     {
@@ -196,12 +291,14 @@ public:
     NodeType type() const override { return NodeType::Method; }
     StringView kind() const override { return "Method"sv; }
 
+    ssize_t table_index() const { return m_table_index; }
     size_t start() const { return m_start; }
     size_t end() const { return m_end; }
     u8 flags() const { return m_flags; }
     u8 arguments() const { return m_flags & 7; }
 
 protected:
+    ssize_t m_table_index { 0 };
     size_t m_start { 0 };
     size_t m_end { 0 };
     u8 m_flags { 0 };
@@ -223,6 +320,29 @@ protected:
     u32 m_address { 0 };
     u8 m_id { 0 };
     u8 m_block_length { 0 };
+};
+
+class ThermalZoneNode : public Node {
+public:
+    ThermalZoneNode() { }
+
+    NodeType type() const override { return NodeType::ThermalZone; }
+    StringView kind() const override { return "ThermalZone"sv; }
+};
+
+class MutexNode : public Node {
+public:
+    MutexNode(u8 sync_flags)
+        : m_sync_flags(sync_flags)
+    {
+    }
+
+    NodeType type() const override { return NodeType::Mutex; }
+    StringView kind() const override { return "Mutex"sv; }
+    u8 sync_flags() const { return m_sync_flags; }
+
+protected:
+    u8 m_sync_flags { 0 };
 };
 
 }
