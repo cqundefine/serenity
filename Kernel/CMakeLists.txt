@@ -637,6 +637,15 @@ set(AK_SOURCES
     ../AK/UUID.cpp
 )
 
+set(ACPI_SOURCES
+    ../Userland/Libraries/LibACPI/Interpreter.cpp
+    ../Userland/Libraries/LibACPI/NameString.cpp
+    ../Userland/Libraries/LibACPI/Node.cpp
+    ../Userland/Libraries/LibACPI/NodeData.cpp
+    ../Userland/Libraries/LibACPI/OpcodeFrame.cpp
+    ../Userland/Libraries/LibACPI/TableStream.cpp
+)
+
 set(DT_SOURCES
     ../Userland/Libraries/LibDeviceTree/DeviceTree.cpp
     ../Userland/Libraries/LibDeviceTree/FlattenedDeviceTree.cpp
@@ -840,6 +849,7 @@ set(SOURCES
     ${KERNEL_SOURCES}
     ${GENERATED_SOURCES}
     ${AK_SOURCES}
+    ${ACPI_SOURCES}
     ${DT_SOURCES}
     ${EDID_SOURCES}
     ${ELF_SOURCES}

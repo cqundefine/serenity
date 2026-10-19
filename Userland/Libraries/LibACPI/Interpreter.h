@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -10,6 +11,7 @@
 #include "OpcodeFrame.h"
 #include "TableStream.h"
 #include <AK/Error.h>
+#include <AK/Function.h>
 #include <AK/Vector.h>
 
 namespace ACPI {
@@ -40,7 +42,7 @@ public:
             dbgln("[LibACPI] FrameStack: Popping frame.");
         }
 
-        T item = m_items[m_items.size() - 1];
+        T item = move(m_items[m_items.size() - 1]);
         m_items.remove(m_items.size() - 1);
         return item;
     }
@@ -55,12 +57,14 @@ public:
         return m_items.at(index);
     }
 
-    void push(T item)
+    ErrorOr<void> push(T item)
     {
         if constexpr (D) {
             dbgln("[LibACPI] FrameStack: Pushing frame.");
         }
-        m_items.append(item);
+
+        TRY(m_items.try_append(move(item)));
+        return {};
     }
 
 private:
@@ -94,14 +98,14 @@ protected:
 
 class Interpreter {
 public:
-    Interpreter(InterpreterCallbacks& callbacks)
+    Interpreter(InterpreterCallbacks const& callbacks)
         : m_callbacks(callbacks)
     {
     }
 
     ErrorOr<void> load(TableStream const& stream, bool ignore_block_header);
     ErrorOr<NodeData> evaluate(NameString const& path);
-    void print_namespace() const;
+    ErrorOr<void> print_namespace() const;
 
 protected:
     enum class State : u8 {
@@ -121,7 +125,7 @@ protected:
     ErrorOr<void> finalize_term_opcode(OpcodeFrame& frame, TableStream& stream);
 
     void debug_print_header(TableStream& stream, size_t operand_index = 0);
-    void print_node(RefPtr<Node> const& node, int depth) const;
+    ErrorOr<void> print_node(RefPtr<Node> const& node, int depth) const;
 
     State m_state { State::ReadingOpcode };
 
@@ -129,8 +133,11 @@ protected:
     FrameStack<ScopeFrame, false> m_scope_frames;
     FrameStack<OpcodeFrame, false> m_opcode_frames;
 
+    // FIXME: Find a better way to handle Else
+    bool m_last_if_condition = false;
+
     RefPtr<Node> m_namespace_root;
-    InterpreterCallbacks& m_callbacks;
+    InterpreterCallbacks const& m_callbacks;
 };
 
 }

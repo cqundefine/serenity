@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -7,11 +8,15 @@
 #pragma once
 
 #include "NameString.h"
-#include <AK/String.h>
+#include <AK/ByteBuffer.h>
 #include <AK/Types.h>
 #include <AK/Variant.h>
+#include <AK/Vector.h>
 
 namespace ACPI {
+
+class Node;
+class NodeData;
 
 class Buffer {
 public:
@@ -26,7 +31,28 @@ protected:
     ByteBuffer m_buffer;
 };
 
-class Node;
+class Package {
+public:
+    Package(Vector<NodeData> package)
+        : m_package(move(package))
+    {
+    }
+
+    // FIXME: Remove this ugly hack, it's needed for now for Variant compatibility in Kernel land
+    Package(Package const& other)
+        : m_package(other.m_package.clone().release_value_but_fixme_should_propagate_errors())
+    {
+    }
+
+    Vector<NodeData>& package() { return m_package; }
+    Vector<NodeData> const& package() const { return m_package; }
+
+protected:
+    Vector<NodeData> m_package;
+};
+
+// TODO: This should get refactored with templates
+// TODO: This needs to respect the 32-bit version == 1 / 64-bit version >= 2
 class NodeData {
 public:
     enum class Type : u8 {
@@ -35,7 +61,8 @@ public:
         String,
         Buffer,
         Package,
-        NameString
+        NameString,
+        Reference,
     };
 
     NodeData()
@@ -58,13 +85,18 @@ public:
         , m_data(value)
     {
     }
-    NodeData(Vector<NodeData> const& value)
+    NodeData(Vector<NodeData> value)
         : m_type(Type::Package)
-        , m_data(value)
+        , m_data(move(value))
     {
     }
     NodeData(NameString const& value)
         : m_type(Type::NameString)
+        , m_data(value)
+    {
+    }
+    NodeData(NodeData* value)
+        : m_type(Type::Reference)
         , m_data(value)
     {
     }
@@ -78,10 +110,15 @@ public:
     ErrorOr<ByteBuffer> as_string_raw();
 
     ErrorOr<Buffer*> as_buffer_ptr();
+    ErrorOr<Package*> as_package_ptr();
+
+    ErrorOr<NodeData*> as_reference();
 
 protected:
+    NodeData* maybe_resolve_reference();
+
     Type m_type { Type::None };
-    Variant<NameString, ByteBuffer, i64, Buffer, Vector<NodeData>> m_data;
+    Variant<NameString, ByteBuffer, i64, Buffer, Package, NodeData*> m_data;
 };
 
 }

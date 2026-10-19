@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -34,6 +35,9 @@ enum class MetaOpcode : u16 {
     SuperName = 0xFF48,
     PackageElement = 0xFF49,
     Target = 0xFF4A,
+    IndexFieldElement = 0xFF4B,
+
+    MethodCall = 0xFF7F,
 
     // Statements
     MarkAsCount = 0xFF80,
@@ -46,6 +50,7 @@ using OpcodeFilterFunction = bool (*)(u16);
 class OpcodeFrame : public Vector<NodeData> {
 public:
     static ErrorOr<OpcodeFrame> from_opcode(u16 opcode, size_t start);
+    static OpcodeFrame from_opcode_with_operand_template(u16 opcode, Vector<MetaOpcode> operand_template, size_t start);
 
     bool filter_opcode_for_next_operand(u16 opcode);
     ErrorOr<MetaOpcode> begin_operand();
@@ -60,16 +65,16 @@ public:
     size_t package_length_index() const { return m_package_length_index; }
 
 private:
-    OpcodeFrame(u16 opcode, Span<MetaOpcode> operand_template, size_t start)
+    OpcodeFrame(u16 opcode, Vector<MetaOpcode> operand_template, size_t start)
         : m_opcode(opcode)
-        , m_operand_template(operand_template)
+        , m_operand_template(move(operand_template))
         , m_start(start)
     {
     }
     MetaOpcode peek_next_operand();
 
     u16 m_opcode;
-    Span<MetaOpcode> m_operand_template;
+    Vector<MetaOpcode> m_operand_template;
     size_t m_start;
 
     size_t m_operand_index { 0 };
@@ -79,8 +84,10 @@ private:
     size_t m_counter_end;
 
 protected:
+    // Remove this
     friend class Interpreter;
     size_t m_field_offset { 0 };
+    bool m_expects_reference { false };
 };
 
 }

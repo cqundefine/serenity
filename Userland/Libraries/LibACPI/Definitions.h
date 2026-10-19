@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -27,6 +28,7 @@ enum class Opcode : u16 {
     VarPackageOp = 0x0013,
     MethodOp = 0x0014,
 
+    CreateFieldOp = 0x5B13,
     CreateDWordFieldOp = 0x8A,
     CreateWordFieldOp = 0x8B,
     CreateByteFieldOp = 0x8C,
@@ -49,17 +51,33 @@ enum class Opcode : u16 {
     Arg5Op = 0x006D,
     Arg6Op = 0x006E,
 
-    ShiftLeftOp = 0x79,
+    IfOp = 0x00A0,
+    ElseOp = 0x00A1,
+
+    StoreOp = 0x0070,
+    AddOp = 0x0072,
+    ShiftLeftOp = 0x0079,
+
+    LAndOp = 0x0090,
+    LOrOp = 0x0091,
+    LNotOp = 0x0092,
+    LEqualOp = 0x0093,
+    LGreaterOp = 0x0094,
+    LLessOp = 0x0095,
 
     MutexOp = 0x5B01,
     RevisionOp = 0x5B30,
     DebugOp = 0x5B31,
 
+    CondRefOfOp = 0x5B12,
+
     OpRegionOp = 0x5B80,
     FieldOp = 0x5B81,
     DeviceOp = 0x5B82,
     ProcessorOp = 0x5B83,
+    PowerResOp = 0x5B84,
     ThermalZoneOp = 0x5B85,
+    IndexFieldOp = 0x5B86,
 
     // Inside opcodes enum for ease of interpretation
     BytePrefix = 0x0A,

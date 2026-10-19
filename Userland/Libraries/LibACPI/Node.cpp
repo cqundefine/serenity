@@ -1,16 +1,19 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #include "Node.h"
+#include <AK/Format.h>
+#include <AK/RefPtr.h>
 
 namespace ACPI {
 
 ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const& scope)
 {
-    // dbgln("[LibACPI] Node::find_node: Request to find path '{}' in node {}.", TRY(path.to_string()), scope->name().to_string_view());
+    // dbgln("[LibACPI] Node::find_node: Request to find path '{}' ({}) in node {}.", TRY(path.to_string()), path.count(), scope->name().to_string_view());
 
     auto root = scope;
 
@@ -20,7 +23,7 @@ ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const
         for (size_t i = 0; i < path.depth(); i++) {
             root = root->parent();
             if (root.is_null()) {
-                return Error::from_string_literal("Can't go higher than root!");
+                return Error::from_string_view_or_print_error_and_return_errno("Can't go higher than root!"sv, EINVAL);
             }
         }
     } else if (path.type() == NameString::Type::Absolute) {
@@ -44,8 +47,8 @@ ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const
             return found.release_value();
         }
 
-        warnln("[LibACPI] Node::find_node: Could not find node with name {}!", node_name.to_string_view());
-        return Error::from_string_literal("Node not found!");
+        dbgln("[LibACPI] Node::find_node: Could not find node with name {}!", node_name.to_string_view());
+        return Error::from_string_view_or_print_error_and_return_errno("Node not found!"sv, EINVAL);
     }
 
     // Search crawls down from root via name segments.
@@ -54,7 +57,7 @@ ErrorOr<RefPtr<Node>> Node::find_node(NameString const& path, RefPtr<Node> const
         auto found = root->find_child(node_name);
         if (found.is_error()) {
             // FIXME: Warn without allocating any string.
-            warnln("[LibACPI] Node::find_node: Could not find node at path {}!", path.to_string());
+            dbgln("[LibACPI] Node::find_node: Could not find node at path {}!", path.to_string());
             return found.release_error();
         }
 
@@ -71,42 +74,20 @@ ErrorOr<RefPtr<Node>> Node::find_child(NameSegment name) const
     }
 
     if (child.is_null()) {
-        warnln("[LibACPI] Node::find_child: Child {} does not exist relative to node {}!", name.to_string_view(), m_name.to_string_view());
-        return Error::from_string_literal("Child does not exist.");
+        dbgln("[LibACPI] Node::find_child: Child {} does not exist relative to node {}!", name.to_string_view(), m_name.to_string_view());
+        return Error::from_string_view_or_print_error_and_return_errno("Child does not exist."sv, EINVAL);
     }
     return child;
 }
 
-// ErrorOr<RefPtr<Node>> Node::find_neighbour(NameSegment name) const
-//{
-//     auto child = m_neighbour;
-//     while (child && (child->name() != name))
-//     {
-//         child = child->neighbour();
-//     }
-//
-//     if (child.is_null())
-//         return Error::from_string_literal("Neighbour does not exist.");
-//     return child;
-// }
-
 ErrorOr<RefPtr<Node>> Node::find_child(StringView name) const
 {
     if (name.length() != 4)
-        return Error::from_string_literal("Name must have a lenth of 4.");
+        return Error::from_string_view_or_print_error_and_return_errno("Name must have a length of 4."sv, EINVAL);
 
     auto broken_name = TRY(NameSegment::from_string_view(name));
     return find_child(broken_name);
 }
-
-// ErrorOr<RefPtr<Node>> Node::find_neighbour(StringView name) const
-//{
-//     if (name.length() != 4)
-//         return Error::from_string_literal("Name must have a lenth of 4.");
-//
-//     auto broken_name = TRY(NameSegment::from_string_view(name));
-//     return find_neighbour(broken_name);
-// }
 
 ErrorOr<void> Node::insert_child(NameSegment name, RefPtr<Node> const& node)
 {
@@ -121,10 +102,16 @@ ErrorOr<void> Node::insert_child(NameSegment name, RefPtr<Node> const& node)
 ErrorOr<void> Node::insert_child(StringView name, RefPtr<Node> const& node)
 {
     if (name.length() != 4)
-        return Error::from_string_literal("Name must have a lenth of 4.");
+        return Error::from_string_view_or_print_error_and_return_errno("Name must have a length of 4."sv, EINVAL);
 
     auto broken_name = TRY(NameSegment::from_string_view(name));
     return insert_child(broken_name, node);
+}
+
+ErrorOr<void> Node::write_description(StringBuilder& builder)
+{
+    TRY(builder.try_append(kind()));
+    return {};
 }
 
 // FIXME: Split off into separate <x>Node files.
@@ -146,49 +133,54 @@ static StringView node_data_type_to_string_view(NodeData::Type type)
     }
 }
 
-void NameNode::write_description(StringBuilder& builder)
+ErrorOr<void> NameNode::write_description(StringBuilder& builder)
 {
     builder.append(node_data_type_to_string_view(m_data.type()));
     switch (m_data.type()) {
     case NodeData::Type::Integer: {
-        auto value = m_data.as_integer().release_value_but_fixme_should_propagate_errors();
-        builder.appendff("(Decimal: {}, Hexadecimal: {:X})", value, value);
+        auto value = MUST(m_data.as_integer());
+        TRY(builder.try_appendff("(Decimal: {}, Hexadecimal: {:X})", value, value));
         break;
     }
     case NodeData::Type::String: {
         // FIXME: Currently the TableStream doesn't include the null byte in the ByteBuffer,
         //        to ensure it doesn't get included in a case like this.
         //        Figure out if this is correct.
-        auto value = m_data.as_string_raw().release_value_but_fixme_should_propagate_errors();
+        auto value = MUST(m_data.as_string_raw());
         auto view = StringView(value);
-        builder.appendff("(Buffer: '{}')", view);
+        TRY(builder.try_appendff("(Buffer: '{}')", view));
 
         break;
     }
     case NodeData::Type::Buffer: {
-        auto* value = m_data.as_buffer_ptr().release_value_but_fixme_should_propagate_errors();
+        auto* value = MUST(m_data.as_buffer_ptr());
         auto buffer = value->buffer();
 
-        builder.appendff("(Capacity: {}, Size: {})", buffer.capacity(), buffer.size());
+        TRY(builder.try_appendff("(Capacity: {}, Size: {})", buffer.capacity(), buffer.size()));
         break;
     }
     default:
         break;
     }
+
+    return {};
 }
 
-void MethodNode::write_description(StringBuilder& builder)
+ErrorOr<void> MethodNode::write_description(StringBuilder& builder)
 {
-    builder.appendff("Method(Table: {}, Args: {}, Start: {}, End: {}, Flags: {})", table_index(), arguments(), start(), end(), flags());
+    TRY(builder.try_appendff("Method(Table: {}, Args: {}, Start: {}, End: {}, Flags: {})", table_index(), arguments(), start(), end(), flags()));
+    return {};
 }
 
-void BufferFieldNode::write_description(StringBuilder& builder)
+ErrorOr<void> BufferFieldNode::write_description(StringBuilder& builder)
 {
-    builder.appendff("BufferField(Offset: {}, Size: {}, ptr: {})", m_bit_offset, m_bit_size, m_buffer_ptr);
+    TRY(builder.try_appendff("BufferField(Offset: {}, Size: {}, ptr: {})", m_bit_offset, m_bit_size, m_buffer_ptr));
+    return {};
 }
 
-void AliasNode::write_description(StringBuilder& builder)
+ErrorOr<void> AliasNode::write_description(StringBuilder& builder)
 {
-    builder.appendff("Alias(Destionation: {})", m_destination_namestring.to_string().release_value_but_fixme_should_propagate_errors());
+    TRY(builder.try_appendff("Alias(Destionation: {})", m_destination_namestring.to_string().release_value_but_fixme_should_propagate_errors()));
+    return {};
 }
 }

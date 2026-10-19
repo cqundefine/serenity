@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -7,8 +8,12 @@
 #pragma once
 
 #include <AK/Result.h>
-#include <AK/String.h>
 #include <AK/StringView.h>
+#ifndef KERNEL
+#    include <AK/String.h>
+#else
+#    include <Kernel/Library/KString.h>
+#endif
 
 namespace ACPI {
 
@@ -41,13 +46,18 @@ public:
         Relative
     };
 
-    static ErrorOr<NameString> from_string(StringView const& str);
+    static ErrorOr<NameString> from_string_view(StringView const& str);
     static ErrorOr<NameString> from_table_stream(TableStream& stream);
 
     ErrorOr<NameString> dirname() const;
     ErrorOr<NameSegment> basename() const;
 
+#ifndef KERNEL
     ErrorOr<String> to_string() const;
+#else
+    ErrorOr<NonnullOwnPtr<Kernel::KString>> to_string() const;
+#endif
+
     ErrorOr<NameSegment> segment(size_t index) const;
     Type type() const { return m_type; }
     size_t depth() const { return m_depth; }

@@ -18,6 +18,7 @@
 #include <Kernel/Memory/Region.h>
 #include <Kernel/Memory/TypedMapping.h>
 #include <Kernel/Memory/VirtualAddress.h>
+#include <LibACPI/Interpreter.h>
 
 namespace Kernel::ACPI {
 
@@ -61,8 +62,8 @@ public:
 
     void try_acpi_reboot();
     bool can_reboot();
-    void try_acpi_shutdown();
-    bool can_shutdown() { return false; }
+    ErrorOr<void> try_acpi_shutdown();
+    bool can_shutdown();
 
     void enable_aml_parsing();
 
@@ -85,16 +86,23 @@ public:
 private:
     Parser(PhysicalAddress rsdp, PhysicalAddress fadt, InterruptNumber irq_number);
 
-    void locate_static_data();
+    ErrorOr<void> locate_static_data();
     void locate_main_system_description_table();
     void initialize_main_system_description_table();
     size_t get_table_size(PhysicalAddress);
     u8 get_table_revision(PhysicalAddress);
     void process_fadt_data();
-    void process_dsdt();
+    ErrorOr<void> process_dsdt();
 
     bool validate_reset_register(Memory::TypedMapping<Structures::FADT> const&);
     void access_generic_address(Structures::GenericAddressStructure const&, u32 value);
+
+    struct S5Values {
+        u16 SLP_TYPa;
+        u16 SLP_TYPb;
+    };
+
+    ErrorOr<S5Values> extract_s5_values();
 
     PhysicalAddress m_rsdp;
     PhysicalAddress m_main_system_description_table;
@@ -106,6 +114,8 @@ private:
     bool m_can_process_bytecode { false };
     FADTFlags::HardwareFeatures m_hardware_flags;
     FADTFlags::x86_Specific_Flags m_x86_specific_flags;
+
+    ::ACPI::Interpreter m_interpreter;
 };
 
 }

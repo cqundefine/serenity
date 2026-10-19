@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -19,7 +20,14 @@ static Array<MetaOpcode, 2> word_const_operands = { MetaOpcode::WordData, MetaOp
 static Array<MetaOpcode, 2> dword_const_operands = { MetaOpcode::DWordData, MetaOpcode::End };
 static Array<MetaOpcode, 2> qword_const_operands = { MetaOpcode::QWordData, MetaOpcode::End };
 
-static Array<MetaOpcode, 5> op_region_operands = { MetaOpcode::NameString, MetaOpcode::ByteData, MetaOpcode::TermArg, MetaOpcode::TermArg, MetaOpcode::End };
+static Array<MetaOpcode, 5> op_region_operands = {
+    MetaOpcode::NameString,
+    MetaOpcode::ByteData,
+    MetaOpcode::TermArg,
+    MetaOpcode::TermArg,
+    MetaOpcode::End
+};
+
 static Array<MetaOpcode, 7> field_operands = {
     MetaOpcode::MarkAsCount, MetaOpcode::PackageLength,
     MetaOpcode::NameString,
@@ -27,10 +35,20 @@ static Array<MetaOpcode, 7> field_operands = {
     MetaOpcode::RepeatNextBytes, MetaOpcode::FieldElement,
     MetaOpcode::End
 };
+
 static Array<MetaOpcode, 6> package_operands = {
     MetaOpcode::PackageLength,
     MetaOpcode::MarkAsCount, MetaOpcode::ByteData,
     MetaOpcode::RepeatNextCount, MetaOpcode::PackageElement,
+    MetaOpcode::End
+};
+
+static Array<MetaOpcode, 8> index_field_operands = {
+    MetaOpcode::MarkAsCount, MetaOpcode::PackageLength,
+    MetaOpcode::NameString,
+    MetaOpcode::NameString,
+    MetaOpcode::ByteData,
+    MetaOpcode::RepeatNextBytes, MetaOpcode::IndexFieldElement,
     MetaOpcode::End
 };
 
@@ -60,21 +78,59 @@ static Array<MetaOpcode, 4> method_operands = {
     MetaOpcode::End
 };
 
-static Array<MetaOpcode, 4> shift_left_operands = {
+static Array<MetaOpcode, 4> binary_operation_operands = {
     MetaOpcode::TermArg,
     MetaOpcode::TermArg,
     MetaOpcode::Target,
     MetaOpcode::End
 };
+
+static Array<MetaOpcode, 3> store_operands = {
+    MetaOpcode::TermArg,
+    MetaOpcode::SuperName,
+    MetaOpcode::End,
+};
+
+static Array<MetaOpcode, 3> logical_unary_operands = {
+    MetaOpcode::TermArg,
+    MetaOpcode::End
+};
+
+static Array<MetaOpcode, 3> logical_binary_operands = {
+    MetaOpcode::TermArg,
+    MetaOpcode::TermArg,
+    MetaOpcode::End
+};
+
+static Array<MetaOpcode, 3> if_operands = {
+    MetaOpcode::PackageLength,
+    MetaOpcode::TermArg,
+    MetaOpcode::End
+};
+
+static Array<MetaOpcode, 3> else_operands = {
+    MetaOpcode::PackageLength,
+    MetaOpcode::End
+};
+
 static Array<MetaOpcode, 2> string_const_operands = {
     MetaOpcode::String,
     MetaOpcode::End
 };
+
 static Array<MetaOpcode, 1> empty_operands = {
     MetaOpcode::End
 };
 
 static Array<MetaOpcode, 4> create_unit_field_operands = {
+    MetaOpcode::TermArg,
+    MetaOpcode::TermArg,
+    MetaOpcode::NameString,
+    MetaOpcode::End
+};
+
+static Array<MetaOpcode, 5> create_field_operands = {
+    MetaOpcode::TermArg,
     MetaOpcode::TermArg,
     MetaOpcode::TermArg,
     MetaOpcode::NameString,
@@ -96,10 +152,24 @@ static Array<MetaOpcode, 6> processor_operands = {
     MetaOpcode::End
 };
 
+static Array<MetaOpcode, 5> power_resource_operands = {
+    MetaOpcode::PackageLength,
+    MetaOpcode::NameString,
+    MetaOpcode::ByteData,
+    MetaOpcode::WordData,
+    MetaOpcode::End
+};
+
 static Array<MetaOpcode, 3> thermal_zone_operands = {
     MetaOpcode::PackageLength,
     MetaOpcode::NameString,
     MetaOpcode::End
+};
+
+static Array<MetaOpcode, 3> cond_ref_of_operands = {
+    MetaOpcode::SuperName,
+    MetaOpcode::Target,
+    MetaOpcode::End,
 };
 
 static ErrorOr<Span<MetaOpcode>> get_opcode_operand_template(u16 opcode)
@@ -139,8 +209,12 @@ static ErrorOr<Span<MetaOpcode>> get_opcode_operand_template(u16 opcode)
         return method_operands.span();
     case (u16)Opcode::MutexOp:
         return mutex_operands.span();
+    case (u16)Opcode::PowerResOp:
+        return power_resource_operands.span();
     case (u16)Opcode::ThermalZoneOp:
         return thermal_zone_operands.span();
+    case (u16)Opcode::IndexFieldOp:
+        return index_field_operands.span();
 
     case (u16)Opcode::CreateByteFieldOp:
     case (u16)Opcode::CreateWordFieldOp:
@@ -148,8 +222,32 @@ static ErrorOr<Span<MetaOpcode>> get_opcode_operand_template(u16 opcode)
     case (u16)Opcode::CreateQWordFieldOp:
         return create_unit_field_operands.span();
 
+    case (u16)Opcode::CreateFieldOp:
+        return create_field_operands.span();
+
+    case (u16)Opcode::StoreOp:
+        return store_operands.span();
+    case (u16)Opcode::AddOp:
     case (u16)Opcode::ShiftLeftOp:
-        return shift_left_operands.span();
+        return binary_operation_operands.span();
+
+    case (u16)Opcode::LNotOp:
+        return logical_unary_operands.span();
+
+    case (u16)Opcode::LAndOp:
+    case (u16)Opcode::LOrOp:
+    case (u16)Opcode::LEqualOp:
+    case (u16)Opcode::LGreaterOp:
+    case (u16)Opcode::LLessOp:
+        return logical_binary_operands.span();
+
+    case (u16)Opcode::IfOp:
+        return if_operands.span();
+    case (u16)Opcode::ElseOp:
+        return else_operands.span();
+
+    case (u16)Opcode::CondRefOfOp:
+        return cond_ref_of_operands.span();
 
     case (u16)Opcode::ZeroOp:
     case (u16)Opcode::OneOp:
@@ -157,7 +255,7 @@ static ErrorOr<Span<MetaOpcode>> get_opcode_operand_template(u16 opcode)
     case (u16)MetaOpcode::End:
         return empty_operands.span();
     default:
-        warnln("[LibACPI] get_opcode_operand_template: Unknown opcode template: {:04X}!", opcode);
+        dbgln("[LibACPI] get_opcode_operand_template: Unknown opcode template: {:04X}!", opcode);
         return Error::from_string_view_or_print_error_and_return_errno("Unknown opcode template!"sv, EINVAL);
     }
 }
@@ -182,7 +280,7 @@ static bool named_object_filter(u16 opcode)
     // ProcessorOp found here in 6.3 docs.
     // FIXME: Add support for missing opcodes.
     return (
-        opcode == (u16)Opcode::CreateBitFieldOp || opcode == (u16)Opcode::CreateByteFieldOp || opcode == (u16)Opcode::CreateWordFieldOp || opcode == (u16)Opcode::CreateDWordFieldOp || opcode == (u16)Opcode::CreateQWordFieldOp || opcode == (u16)Opcode::FieldOp || opcode == (u16)Opcode::MutexOp || opcode == (u16)Opcode::DeviceOp || opcode == (u16)Opcode::MethodOp || opcode == (u16)Opcode::ProcessorOp || opcode == (u16)Opcode::ThermalZoneOp || opcode == (u16)Opcode::OpRegionOp);
+        opcode == (u16)Opcode::CreateBitFieldOp || opcode == (u16)Opcode::CreateByteFieldOp || opcode == (u16)Opcode::CreateWordFieldOp || opcode == (u16)Opcode::CreateDWordFieldOp || opcode == (u16)Opcode::CreateQWordFieldOp || opcode == (u16)Opcode::FieldOp || opcode == (u16)Opcode::MutexOp || opcode == (u16)Opcode::DeviceOp || opcode == (u16)Opcode::MethodOp || opcode == (u16)Opcode::PowerResOp || opcode == (u16)Opcode::ProcessorOp || opcode == (u16)Opcode::ThermalZoneOp || opcode == (u16)Opcode::OpRegionOp || opcode == (u16)Opcode::IndexFieldOp || opcode == (u16)Opcode::CreateFieldOp);
 }
 
 static bool object_filter(u16 opcode)
@@ -195,18 +293,16 @@ static bool statement_filter(u16 opcode)
 {
     // StatementOpcode := DefBreak | DefBreakPoint | DefContinue | DefFatal | DefIfElse | DefNoop | DefNotify | DefRelease | DefReset | DefReturn | DefSignal | DefSleep | DefStall | DefWhile
 
-    // FIXME: Add support for statement opcodes.
-    (void)opcode;
-    return false;
+    // FIXME: Add support for more statement opcodes.
+    return (opcode == (u16)Opcode::ElseOp || opcode == (u16)Opcode::IfOp);
 }
 
 static bool expression_filter(u16 opcode)
 {
     // ExpressionOpcode := DefAcquire | DefAdd | DefAnd | DefBuffer | DefConcat | DefConcatRes | DefCondRefOf | DefCopyObject | DefDecrement | DefDerefOf | DefDivide | DefFindSetLeftBit | DefFindSetRightBit | DefFromBCD | DefIncrement | DefIndex | DefLAnd | DefLEqual | DefLGreater | DefLGreaterEqual | DefLLess | DefLLessEqual | DefMid | DefLNot | DefLNotEqual | DefLoadTable | DefLOr | DefMatch | DefMod | DefMultiply | DefNAnd | DefNOr | DefNot | DefObjectType | DefOr | DefPackage | DefVarPackage | DefRefOf | DefShiftLeft | DefShiftRight | DefSizeOf | DefStore | DefSubtract | DefTimer | DefToBCD | DefToBuffer | DefToDecimalString | DefToHexString | DefToInteger | DefToString | DefWait | DefXOr | MethodInvocation
 
-    // FIXME: Add support for expression opcodes.
-    (void)opcode;
-    return false;
+    // FIXME: Add support for more expression opcodes.
+    return (opcode == (u16)Opcode::AddOp || opcode == (u16)Opcode::CondRefOfOp || opcode == (u16)Opcode::LAndOp || opcode == (u16)Opcode::LEqualOp || opcode == (u16)Opcode::LGreaterOp || opcode == (u16)Opcode::LLessOp || opcode == (u16)Opcode::LOrOp || opcode == (u16)Opcode::ShiftLeftOp || opcode == (u16)Opcode::StoreOp);
 }
 
 static bool const_object_filter(u16 opcode)
@@ -319,6 +415,7 @@ bool OpcodeFrame::filter_opcode_for_next_operand(u16 opcode)
         return false;
 
     case MetaOpcode::FieldElement:
+    case MetaOpcode::IndexFieldElement:
     case MetaOpcode::TermArg:
     case MetaOpcode::DataObject:
     case MetaOpcode::ObjectReference:
@@ -327,6 +424,9 @@ bool OpcodeFrame::filter_opcode_for_next_operand(u16 opcode)
 
     case MetaOpcode::ComputationalData:
         // FIXME: Implement correct filter for every operand type.
+        return true;
+
+    case MetaOpcode::MethodCall:
         return true;
 
     case MetaOpcode::SuperName:
@@ -374,6 +474,7 @@ ErrorOr<MetaOpcode> OpcodeFrame::begin_operand()
 
 ErrorOr<void> OpcodeFrame::finish_operand(size_t current_offset)
 {
+    m_expects_reference = false;
     auto operand = m_operand_template[m_operand_index];
     if (operand == MetaOpcode::MarkAsCount) {
         // Skip over argument.
@@ -414,7 +515,12 @@ ErrorOr<void> OpcodeFrame::finish_operand(size_t current_offset)
 ErrorOr<OpcodeFrame> OpcodeFrame::from_opcode(u16 opcode, size_t start)
 {
     auto operand_template = TRY(get_opcode_operand_template(opcode));
-    return OpcodeFrame(opcode, operand_template, start);
+    return OpcodeFrame(opcode, TRY(Vector<MetaOpcode>::from_span(operand_template)), start);
+}
+
+OpcodeFrame OpcodeFrame::from_opcode_with_operand_template(u16 opcode, Vector<MetaOpcode> operand_template, size_t start)
+{
+    return OpcodeFrame(opcode, move(operand_template), start);
 }
 
 }

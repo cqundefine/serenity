@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -49,8 +50,8 @@ ErrorOr<BlockHeader> TableStream::read_table_block_header()
     auto table_length = TRY(read_value<u32>());
     auto spec_compliance = TRY(read_value<u8>());
     auto checksum = TRY(read_value<u8>());
-    auto raw_oem_id = TRY(read_in_place<u8>(6));
-    auto raw_oem_table_id = TRY(read_in_place<u8>(8));
+    auto raw_oem_id = TRY(read_in_place<u8 const>(6));
+    auto raw_oem_table_id = TRY(read_in_place<u8 const>(8));
     auto oem_revision = TRY(read_value<u32>());
     auto creator_id = TRY(read_value<u32>());
     auto creator_revision = TRY(read_value<u32>());
@@ -68,9 +69,12 @@ ErrorOr<ByteBuffer> TableStream::read_string()
 {
     size_t start = offset();
     u8 b = TRY(read_value<u8>());
+    if (b == 0)
+        return ByteBuffer::create_uninitialized(0);
     do {
         if (b == 0 || b > 0x7f) {
-            return Error::from_string_literal("Invalid character in string!");
+            dbgln("Invalid character in string: {} at offset {}", b, offset());
+            return Error::from_string_view_or_print_error_and_return_errno("Invalid character in string!"sv, EINVAL);
         }
 
         b = TRY(read_value<u8>());
@@ -79,7 +83,7 @@ ErrorOr<ByteBuffer> TableStream::read_string()
     size_t size = offset() - start;
     TRY(seek(start));
 
-    auto span = TRY(read_in_place<u8>(size - 1));
+    auto span = TRY(read_in_place<u8 const>(size - 1));
     // Skip over null byte so it doesn't end up in the buffer.
     TRY(seek(1, SeekMode::FromCurrentPosition));
     return ByteBuffer::copy(span);

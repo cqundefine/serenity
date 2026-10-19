@@ -5,6 +5,7 @@
  */
 
 #include <AK/Platform.h>
+#include <Kernel/Firmware/ACPI/Initialize.h>
 #if ARCH(X86_64)
 #    include <Kernel/Arch/x86_64/I8042Reboot.h>
 #    include <Kernel/Arch/x86_64/Shutdown.h>
@@ -127,7 +128,12 @@ ErrorOr<void> PowerStateSwitchTask::perform_shutdown(PowerStateSwitchTask::DoReb
     VERIFY(do_reboot == DoReboot::No);
 
     dbgln("Attempting system shutdown...");
-    arch_specific_poweroff(PowerOffOrRebootReason::NoReason);
+    if (ACPI::is_enabled()) {
+        auto maybe_error = ACPI::Parser::the()->try_acpi_shutdown();
+        if (maybe_error.is_error()) {
+            dbgln("ACPI shutdown failed: {}", maybe_error.release_error());
+        }
+    }
     dmesgln("Shutdown can't be completed. It's safe to turn off the computer!");
     Processor::halt();
     VERIFY_NOT_REACHED();

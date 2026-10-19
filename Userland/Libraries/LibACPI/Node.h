@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025, RatcheT2497 <ratchetnumbers@proton.me>
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -9,7 +10,9 @@
 #include "NameString.h"
 #include "NodeData.h"
 #include <AK/Array.h>
-#include <AK/String.h>
+#include <AK/RefCounted.h>
+#include <AK/RefPtr.h>
+#include <AK/StringBuilder.h>
 #include <AK/Variant.h>
 
 namespace ACPI {
@@ -21,12 +24,14 @@ enum class NodeType : u8 {
     Name,
     OperationRegion,
     Field,
+    IndexField,
     BufferField,
     Method,
     Processor,
     Alias,
     Mutex,
-    ThermalZone
+    ThermalZone,
+    PowerResource,
 };
 
 enum class FieldAccess : u8 {
@@ -76,33 +81,6 @@ enum class RegionSpace : u8 {
     OemDefined
 };
 
-class Field {
-public:
-    Field(RefPtr<Node> const& operation_region, u8 flags, size_t offset, size_t size)
-        : m_operation_region(operation_region)
-        , m_flags(flags)
-        , m_offset(offset)
-        , m_size(size)
-    {
-    }
-
-    RefPtr<Node> const& operation_region() const { return m_operation_region; }
-    size_t offset() const { return m_offset; }
-    size_t size() const { return m_size; }
-
-    u8 flags() const { return m_flags; }
-
-    FieldLock lock() const { return (m_flags & 0x10) ? FieldLock::Lock : FieldLock::NoLock; }
-    FieldAccess access() const { return static_cast<FieldAccess>(m_flags & 0x0F); }
-    FieldUpdateRule update_rule() const { return static_cast<FieldUpdateRule>((m_flags >> 5) & 0b11); }
-
-protected:
-    RefPtr<Node> m_operation_region;
-    u8 m_flags;
-    size_t m_offset;
-    size_t m_size;
-};
-
 class Node : public RefCounted<Node> {
 public:
     static ErrorOr<RefPtr<Node>> find_node(NameString const& path, RefPtr<Node> const& scope);
@@ -110,19 +88,15 @@ public:
     ErrorOr<RefPtr<Node>> find_child(NameSegment name) const;
     ErrorOr<RefPtr<Node>> find_child(StringView name) const;
 
-    // ErrorOr<RefPtr<Node>> find_neighbour(NameSegment name) const;
-    // ErrorOr<RefPtr<Node>> find_neighbour(StringView name) const;
-
     ErrorOr<void> insert_child(NameSegment name, RefPtr<Node> const& node);
     ErrorOr<void> insert_child(StringView name, RefPtr<Node> const& node);
-    // ErrorOr<void> insert_child_recursive(NameString path, RefPtr<Node> const& node);
 
     NameSegment name() const { return m_name; }
 
     RefPtr<Node> parent() const { return m_parent; }
     RefPtr<Node> child() const { return m_child; }
     RefPtr<Node> neighbour() const { return m_neighbour; }
-    virtual void write_description(StringBuilder& builder) { builder.append(kind()); }
+    virtual ErrorOr<void> write_description(StringBuilder& builder);
 
     virtual NodeType type() const { return NodeType::Untyped; }
     virtual StringView kind() const { return "Node"sv; }
@@ -182,7 +156,7 @@ public:
     ~NameNode() = default;
 
     NodeData& data() { return m_data; }
-    void write_description(StringBuilder& builder) override;
+    ErrorOr<void> write_description(StringBuilder& builder) override;
     NodeType type() const override { return NodeType::Name; }
     StringView kind() const override { return "Name"sv; }
 
@@ -198,7 +172,7 @@ public:
     {
     }
 
-    void write_description(StringBuilder& builder) override;
+    ErrorOr<void> write_description(StringBuilder& builder) override;
     NodeType type() const override { return NodeType::Alias; }
     StringView kind() const override { return "Alias"sv; }
 
@@ -240,6 +214,40 @@ protected:
     i64 m_length;
 };
 
+class Field {
+public:
+    Field(RefPtr<Node> const& operation_region, u8 flags, size_t offset, size_t size)
+        : m_operation_region(operation_region)
+        , m_flags(flags)
+        , m_offset(offset)
+        , m_size(size)
+    {
+    }
+
+    RefPtr<Node> const& operation_region() const { return m_operation_region; }
+    size_t offset() const { return m_offset; }
+    size_t size() const { return m_size; }
+
+    u8 flags() const { return m_flags; }
+
+    FieldLock lock() const { return (m_flags & 0x10) ? FieldLock::Lock : FieldLock::NoLock; }
+    FieldAccess access() const { return static_cast<FieldAccess>(m_flags & 0x0F); }
+    FieldUpdateRule update_rule() const { return static_cast<FieldUpdateRule>((m_flags >> 5) & 0b11); }
+
+protected:
+    RefPtr<Node> m_operation_region;
+    u8 m_flags;
+    size_t m_offset;
+    size_t m_size;
+};
+
+class IndexFieldNode : public Node {
+public:
+    ~IndexFieldNode() = default;
+    NodeType type() const override { return NodeType::IndexField; }
+    StringView kind() const override { return "IndexField"sv; }
+};
+
 class FieldNode : public Node {
 public:
     FieldNode(Field field)
@@ -266,7 +274,7 @@ public:
     }
     ~BufferFieldNode() = default;
 
-    virtual void write_description(StringBuilder& builder) override;
+    virtual ErrorOr<void> write_description(StringBuilder& builder) override;
     NodeType type() const override { return NodeType::BufferField; }
     StringView kind() const override { return "BufferField"sv; }
 
@@ -287,7 +295,7 @@ public:
     }
     ~MethodNode() = default;
 
-    void write_description(StringBuilder& builder) override;
+    ErrorOr<void> write_description(StringBuilder& builder) override;
     NodeType type() const override { return NodeType::Method; }
     StringView kind() const override { return "Method"sv; }
 
@@ -328,6 +336,14 @@ public:
 
     NodeType type() const override { return NodeType::ThermalZone; }
     StringView kind() const override { return "ThermalZone"sv; }
+};
+
+class PowerResourceNode : public Node {
+public:
+    PowerResourceNode() { }
+
+    NodeType type() const override { return NodeType::PowerResource; }
+    StringView kind() const override { return "PowerResource"sv; }
 };
 
 class MutexNode : public Node {

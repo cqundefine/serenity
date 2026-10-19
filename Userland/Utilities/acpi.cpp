@@ -107,6 +107,15 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
         TRY(interpreter.load(stream, ignore_block_header));
     }
 
-    interpreter.print_namespace();
+    TRY(interpreter.print_namespace());
+    auto s5_node = interpreter.evaluate(::ACPI::NameString::from_string_view("\\_S5_"sv).release_value_but_fixme_should_propagate_errors()).release_value_but_fixme_should_propagate_errors();
+    auto* s5_package = s5_node.as_package_ptr().release_value_but_fixme_should_propagate_errors();
+    VERIFY(s5_package->package().size() >= 2);
+
+    u16 SLP_TYPa = s5_package->package()[0].as_integer().release_value_but_fixme_should_propagate_errors();
+    u16 SLP_TYPb = s5_package->package()[1].as_integer().release_value_but_fixme_should_propagate_errors();
+
+    dbgln("{} {}", SLP_TYPa, SLP_TYPb);
+
     return 0;
 }

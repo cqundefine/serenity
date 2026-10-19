@@ -2,6 +2,7 @@
  * Copyright (c) 2020-2021, Liav A. <liavalb@hotmail.co.il>
  * Copyright (c) 2020-2021, Andreas Kling <kling@serenityos.org>
  * Copyright (c) 2022, the SerenityOS developers.
+ * Copyright (c) 2026, Undefine <undefine@undefine.pl>
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -10,7 +11,11 @@
 #include <AK/Platform.h>
 #include <AK/StringView.h>
 #include <AK/Try.h>
+#include <Kernel/Firmware/ACPI/Definitions.h>
 #include <Kernel/Interrupts/InterruptDisabler.h>
+#include <Kernel/Library/Assertions.h>
+#include <LibACPI/Interpreter.h>
+#include <LibACPI/NameString.h>
 #if ARCH(X86_64)
 #    include <Kernel/Arch/x86_64/Firmware/PCBIOS/Mapper.h>
 #    include <Kernel/Arch/x86_64/IO.h>
@@ -21,6 +26,7 @@
 #include <Kernel/Library/StdLib.h>
 #include <Kernel/Memory/TypedMapping.h>
 #include <Kernel/Sections.h>
+#include <LibACPI/TableStream.h>
 
 namespace Kernel::ACPI {
 
@@ -122,12 +128,14 @@ void Parser::enumerate_static_tables(Function<void(StringView, PhysicalAddress, 
 
 static bool validate_table(Structures::SDTHeader const&, size_t length);
 
-UNMAP_AFTER_INIT void Parser::locate_static_data()
+UNMAP_AFTER_INIT ErrorOr<void> Parser::locate_static_data()
 {
     locate_main_system_description_table();
     initialize_main_system_description_table();
     process_fadt_data();
-    process_dsdt();
+    TRY(process_dsdt());
+
+    return {};
 }
 
 UNMAP_AFTER_INIT Optional<PhysicalAddress> Parser::find_table(StringView signature)
@@ -202,19 +210,24 @@ UNMAP_AFTER_INIT void Parser::process_fadt_data()
     m_hardware_flags.wbinvd_flush = (sdt->flags & (u32)FADTFlags::FeatureFlags::WBINVD_FLUSH);
 }
 
-UNMAP_AFTER_INIT void Parser::process_dsdt()
+UNMAP_AFTER_INIT ErrorOr<void> Parser::process_dsdt()
 {
-    auto sdt = Memory::map_typed<Structures::FADT>(m_fadt).release_value_but_fixme_should_propagate_errors();
+    auto sdt = TRY(Memory::map_typed<Structures::FADT>(m_fadt));
 
     // Add DSDT-pointer to expose the full table in /sys/firmware/acpi/
-    m_sdt_pointers.try_append(PhysicalAddress(sdt->dsdt_ptr)).release_value_but_fixme_should_propagate_errors();
+    TRY(m_sdt_pointers.try_append(PhysicalAddress(sdt->dsdt_ptr)));
 
-    auto dsdt_or_error = Memory::map_typed<Structures::DSDT>(PhysicalAddress(sdt->dsdt_ptr));
-    if (dsdt_or_error.is_error()) {
-        dmesgln("ACPI: DSDT is unmappable");
-        return;
+    if (m_can_process_bytecode) {
+        auto dsdt = TRY(Memory::map_typed<Structures::DSDT>(PhysicalAddress(sdt->dsdt_ptr)));
+        dsdt = TRY(Memory::map_typed<Structures::DSDT>(PhysicalAddress(sdt->dsdt_ptr), dsdt->h.length));
+
+        dmesgln("ACPI: Using DSDT @ {} with {} bytes", PhysicalAddress(sdt->dsdt_ptr), dsdt->h.length);
+
+        ::ACPI::TableStream stream(Bytes(bit_cast<u8*>(&dsdt->definition_block), dsdt->h.length - sizeof(Structures::SDTHeader)));
+        TRY(m_interpreter.load(stream, true));
     }
-    dmesgln("ACPI: Using DSDT @ {} with {} bytes", PhysicalAddress(sdt->dsdt_ptr), dsdt_or_error.value()->h.length);
+
+    return {};
 }
 
 bool Parser::can_reboot()
@@ -324,9 +337,76 @@ void Parser::try_acpi_reboot()
     Processor::halt();
 }
 
-void Parser::try_acpi_shutdown()
+ErrorOr<void> Parser::try_acpi_shutdown()
 {
-    dmesgln("ACPI: Shutdown is not supported with the current configuration, aborting!");
+    if (!can_shutdown()) {
+        dmesgln("ACPI: Shutdown not supported!");
+        return {};
+    }
+
+    auto fadt = TRY(Memory::map_typed<Structures::FADT>(m_fadt));
+
+    auto s5_values = TRY(extract_s5_values());
+
+    // FIXME: 1. OSPM executes the _PTS control method, passing the argument 5.
+
+    // 2. OSPM prepares its components to shut down (flushing disk caches).
+    // NOTE: This step is done ahead of this function call
+
+    // 3. If not a HW-reduced ACPI platform, OSPM writes SLP_TYPa (from the \_S5 object) with the SLP_ENa bit set to the PM1a_CNT register.
+    if (!m_hardware_flags.hardware_reduced_acpi) {
+        Structures::PM1ControlRegister shutdown_value {};
+        shutdown_value.SLP_EN = true;
+        shutdown_value.SLP_TYPx = s5_values.SLP_TYPa;
+
+        if (fadt->h.revision >= 2 && fadt->x_pm1a_cnt_blk.is_nonzero())
+            access_generic_address(fadt->x_pm1a_cnt_blk, shutdown_value.value);
+#if ARCH(X86_64)
+        else if (fadt->PM1a_CNT_BLK != 0)
+            IO::out16(fadt->PM1a_CNT_BLK, shutdown_value.value);
+#endif
+    }
+
+    // 4. OSPM writes SLP_TYPb (from the \_S5 object) with the SLP_ENb bit set to the PM1b_CNT register, or writes the HW-reduced ACPI Sleep
+    //    Type value for S5 and the SLP_EN bit to the Sleep Control Register.
+    if (fadt->h.revision >= 5 && m_hardware_flags.hardware_reduced_acpi && fadt->sleep_control.is_nonzero()) {
+        Structures::SleepControlRegister shutdown_value {};
+        shutdown_value.SLP_EN = true;
+        shutdown_value.SLP_TYPx = s5_values.SLP_TYPa;
+
+        access_generic_address(fadt->sleep_control, shutdown_value.value);
+    } else {
+        Structures::PM1ControlRegister shutdown_value {};
+        shutdown_value.SLP_EN = true;
+        shutdown_value.SLP_TYPx = s5_values.SLP_TYPb;
+
+        if (fadt->h.revision >= 2 && fadt->x_pm1b_cnt_blk.is_nonzero())
+            access_generic_address(fadt->x_pm1b_cnt_blk, shutdown_value.value);
+#if ARCH(X86_64)
+        else if (fadt->PM1b_CNT_BLK != 0)
+            IO::out16(fadt->PM1b_CNT_BLK, shutdown_value.value);
+#endif
+    }
+
+    // 5. The system enters the Soft Off state.
+    Processor::halt();
+}
+
+bool Parser::can_shutdown()
+{
+    return !extract_s5_values().is_error();
+}
+
+ErrorOr<Parser::S5Values> Parser::extract_s5_values()
+{
+    auto s5_node = TRY(m_interpreter.evaluate(TRY(::ACPI::NameString::from_string_view("\\_S5_"sv))));
+    auto* s5_package = TRY(s5_node.as_package_ptr());
+    VERIFY(s5_package->package().size() >= 2);
+
+    u16 SLP_TYPa = TRY(s5_package->package()[0].as_integer());
+    u16 SLP_TYPb = TRY(s5_package->package()[1].as_integer());
+
+    return Parser::S5Values { SLP_TYPa, SLP_TYPb };
 }
 
 size_t Parser::get_table_size(PhysicalAddress table_header)
@@ -398,9 +478,14 @@ UNMAP_AFTER_INIT Parser::Parser(PhysicalAddress rsdp, PhysicalAddress fadt, Inte
     : IRQHandler(irq_number)
     , m_rsdp(rsdp)
     , m_fadt(fadt)
+    , m_interpreter(::ACPI::InterpreterCallbacks())
 {
     dmesgln("ACPI: Using RSDP @ {}", rsdp);
-    locate_static_data();
+    auto maybe_error = locate_static_data();
+    if (maybe_error.is_error()) {
+        dbgln("ACPI Error: {}", maybe_error.release_error());
+        VERIFY_NOT_REACHED();
+    }
 }
 
 static bool validate_table(Structures::SDTHeader const& v_header, size_t length)
@@ -413,5 +498,4 @@ static bool validate_table(Structures::SDTHeader const& v_header, size_t length)
         return true;
     return false;
 }
-
 }
