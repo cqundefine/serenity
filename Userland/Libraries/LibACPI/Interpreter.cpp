@@ -315,7 +315,7 @@ ErrorOr<IterationDecision> Interpreter::read_operand(TableStream& stream, Operan
     case OperandType::NameString: {
         auto value = TRY(stream.read_name_string());
         DEBUG_LOG("Reading namestring... ({})", value.to_string());
-        TRY(top_opcode_frame.finish_operand(value, stream.offset()));
+        TRY(top_opcode_frame.finish_operand(move(value), stream.offset()));
         return IterationDecision::Continue;
     }
     case OperandType::PackageLength: {
@@ -424,7 +424,7 @@ ErrorOr<IterationDecision> Interpreter::read_operand(TableStream& stream, Operan
         auto initial = TRY(stream.peek_byte());
         if (is_namestring_start(initial)) {
             auto name_string = TRY(stream.read_name_string());
-            TRY(top_opcode_frame.finish_operand(name_string, stream.offset()));
+            TRY(top_opcode_frame.finish_operand(move(name_string), stream.offset()));
             return IterationDecision::Continue;
         }
 
@@ -514,7 +514,7 @@ ErrorOr<IterationDecision> Interpreter::cycle(TableStream& stream)
             DEBUG_LOG("Finalizing argument {}", top_frame_value.opcode());
 
             auto value = TRY(finalize_value_opcode(top_frame_value));
-            TRY(m_opcode_frames.last().finish_operand(value, stream.offset()));
+            TRY(m_opcode_frames.last().finish_operand(move(value), stream.offset()));
 
             m_state = State::ReadingOperand;
         } else {
