@@ -79,7 +79,8 @@ UUID::UUID(StringView uuid_string_view, Endianness endianness)
 #ifdef KERNEL
 ErrorOr<NonnullOwnPtr<Kernel::KString>> UUID::to_string() const
 {
-    auto builder = TRY(StringBuilder::create(36));
+    StringBuilder builder;
+    TRY(builder.try_ensure_capacity(36));
     auto nibble0 = TRY(encode_hex(m_uuid_buffer.span().trim(4)));
     TRY(builder.try_append(nibble0->view()));
     TRY(builder.try_append('-'));
