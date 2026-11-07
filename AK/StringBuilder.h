@@ -90,6 +90,8 @@ public:
     [[nodiscard]] bool is_empty() const;
     void trim(size_t count);
 
+    ErrorOr<void> try_ensure_capacity(size_t capacity);
+
     template<class SeparatorType, class CollectionType>
     void join(SeparatorType const& separator, CollectionType const& collection, StringView fmtstr = "{}"sv)
     {

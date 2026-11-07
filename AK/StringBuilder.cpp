@@ -83,6 +83,11 @@ void StringBuilder::trim(size_t count)
     m_buffer.trim(m_buffer.size() - decrease_count, true);
 }
 
+ErrorOr<void> StringBuilder::try_ensure_capacity(size_t capacity)
+{
+    return m_buffer.try_ensure_capacity(capacity);
+}
+
 ErrorOr<void> StringBuilder::try_append(StringView string)
 {
     if (string.is_empty())
