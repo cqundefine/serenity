@@ -20,11 +20,11 @@ public:
 
     using OutputType = ByteString;
 
-    static ErrorOr<StringBuilder> create(size_t initial_capacity = inline_capacity);
-
 #ifdef KERNEL
     StringBuilder() = default;
 #else
+    static ErrorOr<StringBuilder> create(size_t initial_capacity = inline_capacity);
+
     explicit StringBuilder(size_t initial_capacity = inline_capacity);
 #endif
 
